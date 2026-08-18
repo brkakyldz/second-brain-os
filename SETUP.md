@@ -46,6 +46,12 @@ list, whichever fits the conversation:
 5. Location / timezone.
 6. Preferred conversation language (the one you should talk to them in day to day).
 7. Communication style, one line (suggest "concise" as a default if they have no preference).
+8. Brain scope — **global (recommended)** or project-only. Explain it briefly: global means the
+   brain loads and records in *every* Claude Code session on this machine, whatever the project
+   — this is the system's core premise, a brain that grows from everything you work on.
+   Project-only means the brain is only active inside the vault folder itself. Global is the
+   recommended, intended way to run this system; project-only is a narrower fallback for people
+   who don't want a machine-wide hook.
 
 Leave any question they skip blank rather than guessing — don't invent facts about them.
 
@@ -108,6 +114,85 @@ git commit -m "setup: personalize brain"
 git push
 ```
 
+## Step 4.5 — global mode wiring (if chosen)
+
+Only do this if the user chose global in Step 1. Skip straight to Step 5 if they chose
+project-only — the repo's committed default is already project-scoped, so no action is needed.
+
+1. Work out the four hook entries you're about to add, using the **absolute path to this clone**
+   (the user's vault) in each command. Show your user the exact JSON block before writing
+   anything, and get an explicit yes:
+
+   ```json
+   {
+     "hooks": {
+       "SessionStart": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "node \"<absolute path to the user's vault>/.claude/hooks/session-start.mjs\"",
+               "timeout": 60
+             }
+           ]
+         }
+       ],
+       "Stop": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "node \"<absolute path to the user's vault>/.claude/hooks/checkpoint.mjs\"",
+               "timeout": 60
+             }
+           ]
+         }
+       ],
+       "PreCompact": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "node \"<absolute path to the user's vault>/.claude/hooks/checkpoint.mjs\"",
+               "timeout": 60
+             }
+           ]
+         }
+       ],
+       "SessionEnd": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "node \"<absolute path to the user's vault>/.claude/hooks/session-end.mjs\"",
+               "timeout": 30
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+2. Merge this into `~/.claude/settings.json`:
+   - Read the existing file if it exists. If it doesn't, start from `{}`.
+   - Preserve every existing key untouched — do not drop or overwrite anything already there.
+   - If a `hooks` block already exists, append these four entries to the existing
+     `SessionStart`/`Stop`/`PreCompact`/`SessionEnd` arrays rather than replacing them (a user
+     may already have other hooks configured).
+   - After writing, re-read the file and confirm it parses as valid JSON before moving on. If it
+     doesn't, stop and tell your user rather than leaving a broken settings file.
+
+3. Then remove the `hooks` block from the vault's own `.claude/settings.json` (the file at
+   `.claude/settings.json` inside this clone). This prevents the hooks from firing twice when
+   working inside the vault itself. Note for your user: this is why the repo's committed default
+   keeps the `hooks` block project-scoped — it's there for people who skip this step or install
+   manually, and this step is what mirrors their setup to match the global behavior.
+
+4. Note for your user: this wiring is specific to this machine. If they set up a second machine
+   later, they'll need to repeat this step there too — each vault clone ships its own
+   `.claude/hooks/` folder, so it's the same four entries pointing at that machine's clone path.
+
 ## Step 5 — verify
 
 Confirm the session-start hook picks up the new personalization. From inside the clone, with
@@ -135,6 +220,9 @@ Tell your user they can now, optionally:
 Wrap up by telling your user, concretely:
 
 - What you created: the repo name, its GitHub URL, and that it was verified private.
+- Which brain scope they chose (global or project-only) and what that means day to day — global
+  means every Claude Code session on this machine loads and records into this brain;
+  project-only means it's only active inside this vault folder.
 - That mobile capture goes through the `inbox/` folder — point them at `docs/MOBILE.md` for how.
 - That `/triage` and `/curator` are available as slash commands inside a Claude Code session in
   the vault, for filing inbox items and consolidating memory respectively.

@@ -53,8 +53,9 @@ GitHub account. Obsidian is optional but recommended — the vault is just Markd
    > Read SETUP.md from this repository and set up my second brain:
    > `<this repo's URL>/blob/main/SETUP.md`
 
-Claude handles the rest: creates your private repo, interviews you, personalizes the brain, and
-verifies it works.
+Claude handles the rest: creates your private repo, interviews you — including asking whether
+the brain should follow you into every project (global mode, recommended) or stay
+project-scoped — personalizes the brain, and verifies it works.
 
 ### Manual setup (without Claude doing it)
 
@@ -86,7 +87,13 @@ app makes any edit a commit — see [`docs/MOBILE.md`](docs/MOBILE.md)). Next de
 run `/triage` to file everything properly, and run `/curator` periodically (or on a schedule)
 to consolidate memory, resolve stale facts, and keep core files inside their size budgets.
 
-## Global mode (optional)
+## Global mode (recommended)
+
+This is the intended way to run the system: the brain grows from *every* session you have with
+Claude Code, not just sessions inside the vault folder. If you install with the agent-first
+path above, the installer offers this during the Step 1 interview and wires it for you after
+showing you exactly what it's about to write. The manual instructions below are for people who
+installed by hand (the `install.mjs` path) and want to switch to global mode afterward.
 
 By default the hooks only fire inside the vault, because they're wired in this repo's
 `.claude/settings.json` (project scope). Global mode makes the brain follow you into *every*
@@ -99,7 +106,10 @@ anywhere on the machine will load the brain at start and checkpoint into it at S
 `SessionStart` context gains a `Current project: <path>` line and a short standing-rules note
 whenever you're outside the vault. Leave the vault's own project-level `hooks` block empty when
 you do this, to avoid double-firing inside the vault. Trade-off: every session on the machine,
-in every project, now pays a small brain pull at start and a brain commit at each Stop.
+in every project, now pays a small brain pull at start and a brain commit at each Stop. There's
+also a rare, harmless concurrency edge case: if two sessions on the machine start at the exact
+same moment, one pull can fail — this fails open and recovers on the next run, so it's never
+destructive, just a missed sync that one session.
 
 ## Safety
 
