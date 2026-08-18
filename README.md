@@ -119,7 +119,8 @@ destructive, just a missed sync that one session.
   key blocks, tokens, password literals). Anything that matches is left uncommitted and logged
   — it never gets pushed.
 - **Nothing is ever deleted automatically.** Stale or closed content is moved to `archive/`,
-  never removed. `git revert` covers everything else.
+  never removed. The curator can propose deletions for your approval in three narrow cases
+  (see the lifecycle policy) — it never executes them itself. `git revert` covers everything else.
 - For an extra layer, install [pre-commit](https://pre-commit.com) and run `pre-commit install`
   — this repo ships a `.pre-commit-config.yaml` that wires up
   [gitleaks](https://github.com/gitleaks/gitleaks) as an independent, human-side secret check.

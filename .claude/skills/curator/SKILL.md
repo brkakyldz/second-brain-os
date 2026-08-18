@@ -45,10 +45,14 @@ Runs a maintenance pass over the memory core. Only invoked explicitly via
    budget after steps 2–4, repeat consolidation — do not stop with a file
    over budget.
 
-6. **Never delete.** Nothing produced by this pass is ever deleted outright.
-   Stale content always lands in `_brain/memory/`, `archive/`, or
-   `archive/logs/`. Only exact duplicate lines within `MEMORY.md`/`USER.md`
-   itself may be collapsed to one.
+6. **Never delete — propose instead.** Nothing produced by this pass is ever
+   deleted outright. Stale content always lands in `_brain/memory/`,
+   `archive/`, or `archive/logs/`. Only exact duplicate lines within
+   `MEMORY.md`/`USER.md` itself may be collapsed to one. If a note meets all
+   three deletion conditions of [[_brain/playbooks/lifecycle-policy]] §6
+   (unlinked + superseded + not load-bearing), list it in a **deletion
+   candidates table** at the end of the pass for the owner to approve — do
+   not execute the deletion.
 
 7. **Provenance stays intact.** Facts carrying a `source:` marker (derived
    from untrusted external content) keep that marker through any merge or
