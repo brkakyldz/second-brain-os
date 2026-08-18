@@ -86,6 +86,21 @@ app makes any edit a commit — see [`docs/MOBILE.md`](docs/MOBILE.md)). Next de
 run `/triage` to file everything properly, and run `/curator` periodically (or on a schedule)
 to consolidate memory, resolve stale facts, and keep core files inside their size budgets.
 
+## Global mode (optional)
+
+By default the hooks only fire inside the vault, because they're wired in this repo's
+`.claude/settings.json` (project scope). Global mode makes the brain follow you into *every*
+project on the machine: move the `hooks` block out of the vault's `.claude/settings.json` and
+into `~/.claude/settings.json` instead, changing each command from
+`${CLAUDE_PROJECT_DIR}/.claude/hooks/...` to an absolute path to your vault's scripts, e.g.
+`node "<path-to-your-brain>/.claude/hooks/session-start.mjs"`. The scripts resolve the brain
+root themselves (script location, or `BRAIN_DIR` if set), so once wired this way any session
+anywhere on the machine will load the brain at start and checkpoint into it at Stop —
+`SessionStart` context gains a `Current project: <path>` line and a short standing-rules note
+whenever you're outside the vault. Leave the vault's own project-level `hooks` block empty when
+you do this, to avoid double-firing inside the vault. Trade-off: every session on the machine,
+in every project, now pays a small brain pull at start and a brain commit at each Stop.
+
 ## Safety
 
 - **Your clone must be private.** This template is public and contains no personal data; your

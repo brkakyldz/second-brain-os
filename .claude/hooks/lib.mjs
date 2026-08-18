@@ -11,13 +11,25 @@ export function thisDir(importMetaUrl) {
   return path.dirname(fileURLToPath(importMetaUrl));
 }
 
+// Brain-root resolution precedence (ADR 0008): BRAIN_DIR env → script's own
+// location → CLAUDE_PROJECT_DIR. Scripts always live at
+// <vault>/.claude/hooks/<name>.mjs, so script-location is always the vault
+// root — this makes the same scripts correct when invoked from any cwd by
+// user-level hooks (global mode) as well as from inside the vault itself.
 export function getRepoRoot(hookDir) {
+  const fromBrainDir = process.env.BRAIN_DIR;
+  if (fromBrainDir && fromBrainDir.trim() !== '') {
+    return fromBrainDir;
+  }
+  if (hookDir) {
+    // script lives at <repoRoot>/.claude/hooks/<name>.mjs
+    return path.resolve(hookDir, '../..');
+  }
   const fromEnv = process.env.CLAUDE_PROJECT_DIR;
   if (fromEnv && fromEnv.trim() !== '') {
     return fromEnv;
   }
-  // script lives at <repoRoot>/.claude/hooks/<name>.mjs
-  return path.resolve(hookDir, '../..');
+  return process.cwd();
 }
 
 // Read stdin without ever hanging: the hook may receive a small JSON payload

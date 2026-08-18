@@ -18,13 +18,30 @@ const __dirname = path.dirname(__filename);
 
 const HEADER = '## Second Brain — session context (auto-injected)';
 
+// Brain-root resolution precedence (ADR 0008): BRAIN_DIR env → script's own
+// location → CLAUDE_PROJECT_DIR. Scripts always live at
+// <vault>/.claude/hooks/session-start.mjs, so script-location is always the
+// vault root — this makes the same script correct when invoked from any cwd
+// by user-level hooks (global mode) as well as from inside the vault itself.
 function getRepoRoot() {
+  const fromBrainDir = process.env.BRAIN_DIR;
+  if (fromBrainDir && fromBrainDir.trim() !== '') {
+    return fromBrainDir;
+  }
+  // script lives at <repoRoot>/.claude/hooks/session-start.mjs
+  return path.resolve(__dirname, '../..');
+}
+
+// The session's own project dir — the cwd Claude Code is actually working
+// in for this session. Distinct from the brain root above: when running in
+// global mode this will differ from the brain root for every project except
+// the vault itself.
+function getProjectDir() {
   const fromEnv = process.env.CLAUDE_PROJECT_DIR;
   if (fromEnv && fromEnv.trim() !== '') {
     return fromEnv;
   }
-  // script lives at <repoRoot>/.claude/hooks/session-start.mjs
-  return path.resolve(__dirname, '../..');
+  return process.cwd();
 }
 
 // Read stdin without ever hanging: SessionStart hooks may receive a small
@@ -170,14 +187,38 @@ function findLatestSessionLog(logsDir) {
   }
 }
 
-function buildContext(repoRoot, pullResult) {
+function normalizeForCompare(p) {
+  return path.resolve(p).replace(/[\\/]+$/, '').toLowerCase();
+}
+
+function buildContext(repoRoot, pullResult, projectDir) {
   const sections = [];
+  const isOutsideVault = normalizeForCompare(projectDir) !== normalizeForCompare(repoRoot);
 
   let header = HEADER;
+  if (isOutsideVault) {
+    header += `\nCurrent project: ${projectDir}`;
+  }
   if (!pullResult.ok) {
     header += `\n⚠ git pull failed (${pullResult.warning}) — working from local state`;
   }
   sections.push(header);
+
+  if (isOutsideVault) {
+    sections.push(
+      [
+        '### Global brain mode — standing rules',
+        `You are working outside the brain vault. The brain lives at ${repoRoot}.`,
+        'When substantial learnings, decisions, or durable facts emerge in this session,',
+        `append a session-log entry to ${path.join(repoRoot, '_brain', 'logs', 'YYYY-MM-DD_HHMM.md')}`,
+        '(taxonomy: decision|bugfix|feature|discovery|preference|change, and name the',
+        `project it came from) and update ${path.join(repoRoot, '_brain', 'MEMORY.md')} if a durable`,
+        'fact emerged (one line, budget 100, pointer style). Never write brain content',
+        "into the current project's repo, and never commit the current project's files",
+        'into the brain.',
+      ].join('\n')
+    );
+  }
 
   const coreFiles = ['IDENTITY.md', 'USER.md', 'MEMORY.md'];
   for (const name of coreFiles) {
@@ -213,10 +254,11 @@ function emit(additionalContext) {
 async function main() {
   await readStdin();
   const repoRoot = getRepoRoot();
+  const projectDir = getProjectDir();
   logLine(repoRoot, 'run started');
 
   const pullResult = runGitPull(repoRoot);
-  const context = buildContext(repoRoot, pullResult);
+  const context = buildContext(repoRoot, pullResult, projectDir);
 
   emit(context);
   process.exit(0);
