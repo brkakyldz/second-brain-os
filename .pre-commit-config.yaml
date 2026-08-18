@@ -1,0 +1,16 @@
+# Optional defense-in-depth layer for contributors who have the `pre-commit`
+# framework (https://pre-commit.com) installed locally.
+#
+# This is NOT the always-on defense: the Node secret scan in
+# `.claude/hooks/lib.mjs` (`scanStagedForSecrets`, run inside every
+# checkpoint commit) is the layer that actually protects this vault, because
+# it runs automatically inside the hook-driven commit flow with no setup.
+# gitleaks here is a second, independent check for humans who commit by hand
+# and have chosen to install the pre-commit framework themselves.
+#
+# To enable: `pip install pre-commit && pre-commit install` in this repo.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks

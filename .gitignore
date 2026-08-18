@@ -1,0 +1,20 @@
+# Obsidian per-device state
+.obsidian/workspace*
+.obsidian/cache/
+.trash/
+
+# OS clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# secret-shaped files — first line of defense
+.env
+.env.*
+*.key
+*.pem
+*credentials*
+*secret*
+
+# automation noise — durable but not vault content
+_brain/logs/.automation.log
