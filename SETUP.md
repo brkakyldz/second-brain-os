@@ -46,7 +46,10 @@ list, whichever fits the conversation:
 5. Location / timezone.
 6. Preferred conversation language (the one you should talk to them in day to day).
 7. Communication style, one line (suggest "concise" as a default if they have no preference).
-8. Brain scope — **global (recommended)** or project-only. Explain it briefly: global means the
+8. Technical background, one line (tools/languages they use, experience level).
+9. Current focus — their active project(s). For each one they name, offer to create a matching
+   note under `projects/` for it.
+10. Brain scope — **global (recommended)** or project-only. Explain it briefly: global means the
    brain loads and records in *every* Claude Code session on this machine, whatever the project
    — this is the system's core premise, a brain that grows from everything you work on.
    Project-only means the brain is only active inside the vault folder itself. Global is the
@@ -87,11 +90,13 @@ interactively with the user already, edit the files directly instead of shelling
 
 In the new clone:
 
-- Open `_brain/USER.md` and fill in the `## Name`, `## Role`, `## Location / Timezone`, and
-  `## Communication style` sections from the Step 1 answers. Under `## Communication style`,
-  include both a line noting their preferred conversation language (vault content itself always
-  stays in English) and their one-line style preference. Leave any section blank if the user
-  didn't answer it — never invent a value.
+- Open `_brain/USER.md` and fill in the `## Name`, `## Role`, `## Location / Timezone`,
+  `## Communication style`, `## Technical background`, and `## Current focus` sections from the
+  Step 1 answers. Under `## Communication style`, include both a line noting their preferred
+  conversation language (vault content itself always stays in English) and their one-line style
+  preference. Leave any section blank if the user didn't answer it — never invent a value.
+- If they named any active projects under "current focus" and agreed to notes for them, create
+  the corresponding files under `projects/`.
 - If their preferred conversation language is not English, open `_brain/IDENTITY.md` and replace
   the commented example line:
   ```
@@ -202,8 +207,11 @@ Confirm the session-start hook picks up the new personalization. From inside the
 node .claude/hooks/session-start.mjs
 ```
 
-(On Windows PowerShell: `$env:CLAUDE_PROJECT_DIR = (Get-Location).Path; node
-.claude/hooks/session-start.mjs`.)
+Use whichever form matches the shell you're actually running in:
+
+- Git Bash / macOS / Linux: `CLAUDE_PROJECT_DIR="$(pwd)" node .claude/hooks/session-start.mjs`
+- Windows PowerShell: `$env:CLAUDE_PROJECT_DIR = (Get-Location).Path; node
+  .claude/hooks/session-start.mjs`
 
 Check the printed JSON: `hookSpecificOutput.additionalContext` should contain the user's name
 from `_brain/USER.md`. If it doesn't, stop and investigate before telling your user setup is
