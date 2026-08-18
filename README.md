@@ -34,7 +34,8 @@ daily/            daily notes, YYYY-MM-DD.md
 inbox/            quick capture, triaged later
 archive/          closed projects and stale notes — never deleted, always moved here
 .claude/          hooks (session-start, checkpoint, session-end) + skills (curator, triage)
-install.mjs       one-time interactive setup for your personalized clone
+SETUP.md          agent-run installation runbook — see Quickstart
+install.mjs       one-time interactive setup for your personalized clone (manual path)
 docs/             architecture and mobile-usage guides
 ```
 
@@ -45,6 +46,17 @@ beyond Node itself.
 
 **Requirements:** git, Node.js 18+, [Claude Code](https://claude.com/product/claude-code), a
 GitHub account. Obsidian is optional but recommended — the vault is just Markdown either way.
+
+1. Open Claude Code and paste this in, swapping the link for this repo's own `SETUP.md` URL
+   (take the URL you're reading this on and add `/blob/main/SETUP.md`):
+
+   > Read SETUP.md from this repository and set up my second brain:
+   > `<this repo's URL>/blob/main/SETUP.md`
+
+Claude handles the rest: creates your private repo, interviews you, personalizes the brain, and
+verifies it works.
+
+### Manual setup (without Claude doing it)
 
 1. Click **Use this template** above and create your own repository — **choose Private.** This
    will be your actual brain; it should never be public.
