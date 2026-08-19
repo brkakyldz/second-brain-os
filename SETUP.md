@@ -234,5 +234,11 @@ Wrap up by telling your user, concretely:
 - That mobile capture goes through the `inbox/` folder — point them at `docs/MOBILE.md` for how.
 - That `/triage` and `/curator` are available as slash commands inside a Claude Code session in
   the vault, for filing inbox items and consolidating memory respectively.
+- That `_brain/OPEN_QUESTIONS.md` is a routing table for open questions, seeded with placeholder
+  examples — worth a few minutes replacing them with real ones, but not required to start.
+- That `scripts/` holds an **optional** deterministic automation roster (backup verification,
+  link sweeps, off-site bundles, scheduled `/triage`+`/curator`) that can be wired to Windows Task
+  Scheduler later via `scripts/register-tasks.ps1` — see `scripts/README.md`. Nothing in it runs
+  automatically; it's there for when they want it.
 
 That's the full install. Nothing else in this repo needs to run for a first-time setup.

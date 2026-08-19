@@ -27,12 +27,15 @@ Full design rationale: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## What's inside
 
 ```
-_brain/           the memory core: IDENTITY.md, USER.md, MEMORY.md, memory/, playbooks/, logs/
+_brain/           the memory core: IDENTITY.md, USER.md, MEMORY.md, OPEN_QUESTIONS.md, memory/,
+                  playbooks/, templates/, logs/
 projects/         one note per active project — goal, status, decisions
 knowledge/        atomic, wikilinked permanent notes (PKM layer)
 daily/            daily notes, YYYY-MM-DD.md
 inbox/            quick capture, triaged later
 archive/          closed projects and stale notes — never deleted, always moved here
+scripts/          optional automation roster (backup verify, link sweep, off-site bundle,
+                  scheduled triage/curator, daily resurfacing) — see scripts/README.md
 .claude/          hooks (session-start, checkpoint, session-end) + skills (curator, triage)
 SETUP.md          agent-run installation runbook — see Quickstart
 install.mjs       one-time interactive setup for your personalized clone (manual path)
@@ -144,7 +147,10 @@ successful push.
 Git is the only database here on purpose — recovery and undo are free.
 
 **Do I need a scheduled job for anything?** No, everything can be run manually (`/curator`,
-`/triage`). A weekly `/curator` schedule is a nice-to-have, not a requirement.
+`/triage`). A weekly `/curator` schedule is a nice-to-have, not a requirement. `scripts/` ships
+an optional Windows Task Scheduler roster (backup verification, link sweeps, off-site bundles,
+scheduled `/triage`+`/curator`, daily resurfacing) for anyone who wants the deterministic parts
+running unattended — see `scripts/README.md`. Nothing registers itself; you opt in by hand.
 
 **What happens if a memory file gets too big?** `MEMORY.md` and `USER.md` have explicit line
 budgets. Going over budget never silently truncates — the checkpoint hook warns loudly and

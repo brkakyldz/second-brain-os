@@ -62,14 +62,17 @@ your-brain/                    # private GitHub repo = Obsidian vault = the brai
 │   ├── IDENTITY.md            # how the assistant behaves here (persona, tone, rules of engagement)
 │   ├── USER.md                # who the user is: role, preferences, working style   [budget ~40 lines]
 │   ├── MEMORY.md              # index of durable facts, one line each + pointer     [budget ~100 lines]
+│   ├── OPEN_QUESTIONS.md      # routing table: questions the vault is listening for answers to
 │   ├── memory/                # topic files holding the detail MEMORY.md points to
-│   ├── playbooks/             # procedural memory: "how we do X here" recipes
+│   ├── playbooks/             # procedural memory: "how we do X here" recipes (promoted after ≥2 uses)
+│   ├── templates/             # note templates, incl. decision.md (pre-mortem + outcome)
 │   └── logs/                  # append-only session logs, YYYY-MM-DD_HHMM.md
 ├── projects/                  # one note (or folder) per active project: goal, status, decisions
 ├── knowledge/                 # PKM layer: atomic, wikilinked permanent notes
 ├── daily/                     # daily notes, YYYY-MM-DD.md
 ├── inbox/                     # quick capture (mobile writes land here; triaged later)
 ├── archive/                   # closed projects, stale notes — never deleted, always archived
+├── scripts/                   # optional deterministic automation roster (see § 3.7)
 └── .claude/
     ├── settings.json          # hook wiring (committed, shared across devices)
     ├── hooks/                 # Node.js .mjs hook scripts (cross-platform)
@@ -149,7 +152,27 @@ A `/curator` skill (run manually, or scheduled e.g. weekly): merges duplicate fa
 contradictions in favor of newer evidence, archives stale entries, distills old session logs
 into topic files, and re-checks size budgets. Retention heuristic (borrowed from prior art):
 **every stored fact must be timeless, dated, or a pointer to a live source** — anything else
-is a staleness bug waiting to happen.
+is a staleness bug waiting to happen. Contradictions never overwrite: a superseded fact gets its
+`valid_to`/`superseded_by` keys set (bi-temporal frontmatter, see `CLAUDE.md` § Note conventions)
+and the new belief is written as a new entry — the old one stays as a visible, dated record. Every inferred
+fact the curator writes carries a `source:` pointer (file path, quote, or commit hash); every
+proposal it can't apply directly (a merge, an archive, a delete) is logged as a row in a
+proposal table rather than executed, so acceptance/rejection stays auditable. Procedures follow
+the same discipline one level up: a workflow only promotes from a one-off recipe to
+`_brain/playbooks/` after **two independent successful uses** — evolution decoupled from
+execution, applied to the vault's own procedures.
+
+### 3.7 Scheduled automation (optional)
+
+An optional `scripts/` folder (PowerShell + Node stdlib, no dependencies) covers the
+deterministic half of upkeep, wired to Windows Task Scheduler via `scripts/register-tasks.ps1`
+(reviewed and run by hand — never auto-registered): daily backup/push verification, a weekly
+broken-link/orphan sweep, a weekly off-site `git bundle` snapshot, a weekly headless
+`claude -p "/triage then /curator"` pass, and a daily weighted-random "resurface 3 notes" job.
+All scripts that touch vault state share a cooperative lockfile (`scripts/.brain.lock`) so two
+jobs never race. This keeps deterministic, no-judgment work off the LLM budget entirely — see
+`scripts/README.md` for the full roster and kill criteria per job. None of it is required: every
+job it automates can also be run manually or skipped.
 
 ## 4. The two repositories
 

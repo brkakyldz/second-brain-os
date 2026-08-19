@@ -1,4 +1,11 @@
 * text=auto
 *.sh text eol=lf
 *.mjs text eol=lf
+
+# append-only episodic files: keep both sides of a concurrent write
 _brain/logs/*.md merge=union
+_brain/logs/**/*.md merge=union
+
+# binary-ish single-file formats: never let git invent a merge
+*.canvas -merge
+*.excalidraw -merge

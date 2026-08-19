@@ -20,6 +20,7 @@ trail. `git revert` is undo. GitHub is sync and sharing — nothing more.
   - `memory/` — topic files holding the detail `MEMORY.md` points to.
   - `playbooks/` — procedural memory: "how we do X here" recipes.
   - `logs/` — append-only session logs, `YYYY-MM-DD_HHMM.md`.
+  - `templates/` — note templates (capture, daily, knowledge, project, playbook, decision).
 - `projects/` — one note per active project: goal, status, decisions.
 - `knowledge/` — atomic, wikilinked permanent notes (PKM layer).
 - `daily/` — daily notes, `YYYY-MM-DD.md`.
@@ -60,16 +61,25 @@ rules:
   or link it first; then the raw capture is deleted as part of the move.
 - **Maturity through reuse.** `seedling → growing → evergreen` promotion only
   when a note is touched or linked from new work, never on a timer. Every new
-  note gets ≥1 outbound wikilink before it is closed.
+  note gets ≥1 outbound wikilink before it is closed. **Evergreen gate:**
+  `status: evergreen` additionally requires a 1–2 sentence top-line
+  distillation at the head of the note. If the idea can't be stated that
+  briefly, it hasn't matured yet — leave it `growing`.
 - **Domain-dependent staleness.** Fast-decaying notes (tools, versions, APIs)
   get `review_by: created + 12 months`; stable concepts get none. Feedback
   memories are re-challenged after 90 days. Overdue `review_by` flags, never
   auto-deletes.
 - **Contradictions:** newer evidence wins, but the override is logged —
-  supersession is visible, never silent.
+  supersession is visible, never silent. Mechanically: close the old fact's
+  window and point it forward (bi-temporal keys, § Note conventions).
 - **Corroboration gate:** a once-seen fact enters `_brain/memory/` as
   `confidence: low`; it reaches `MEMORY.md` only after a second independent
   session confirms it.
+- **Playbook gate:** a procedure is promoted to `_brain/playbooks/` only after
+  **≥2 verified successful uses**. A workflow that just worked may be drafted
+  as a playbook in the same session, marked `uses: 1`, and stays there until
+  a second use corroborates it. Every playbook carries a one-line frontmatter
+  `description:` — good enough to judge relevance without opening the file.
 - **Protected files:** `IDENTITY.md` and this file are never edited by an
   automated pass — agents propose a diff, the owner applies it.
 - **Pins:** `pinned: true` exempts from demotion; max 10 vault-wide,
@@ -78,6 +88,15 @@ rules:
   changes proposed as a table); monthly structural audit (report-only:
   budgets, orphans, overdue reviews, tag sprawl); quarterly pin + policy
   review. Audit and consolidation stay separate passes.
+- **Notification budget:** hard cap **3 proactive items per day**, counted
+  across *all* surfaces together (session start, daily note, briefs, alerts).
+  Everything past the cap becomes a pull artifact — a file the owner opens
+  when they want it, never a push. False positives kill a review queue
+  permanently.
+- **Acceptance logging:** every agent suggestion (link, MOC, pair, proposal)
+  is logged with accept/reject in `_brain/logs/`. Acceptance rate is the
+  master metric — a suggestion feature that isn't accepted gets killed, not
+  tuned forever.
 - **Growth control:** no new folder/tag/taxonomy without an actual retrieval
   failure that demands it. Health metric is notes *re-used* this month, not
   notes captured.
@@ -96,14 +115,23 @@ discovery | preference | change`. If a durable fact emerged, also update
 - Internal links: `[[wikilinks]]`, used with surrounding sentence context (not
   bare link lists).
 - Frontmatter: flat YAML, this schema —
-  - `type`: `project | knowledge | daily | log | playbook | capture`
+  - `type`: `project | knowledge | daily | log | playbook | capture | decision`
   - `created`: `YYYY-MM-DD`
   - `tags`: list
   - `status`: knowledge → `seedling | growing | evergreen`; projects →
-    `active | paused | done`
+    `active | paused | done`; decisions → `accepted | superseded | reversed`
   - `source`: optional, required for anything derived from untrusted content
   - `related`: optional list of `[[wikilinks]]`
 - Dates are always `YYYY-MM-DD`.
+- **Bi-temporal keys** — optional, for durable facts whose truth has a window:
+  `valid_from` (when the fact became true), `valid_to` (when it stopped),
+  `recorded_at` (when we learned it), `superseded_by` (`[[wikilink]]` to what
+  replaced it). Knowledge time and event time are different things; keeping
+  both is what lets a future session answer "what did we believe, and when".
+- **A contradiction closes a window, it never overwrites one.** Set `valid_to`
+  and `superseded_by` on the old fact, then write the new fact as a *new*
+  entry or note. Never edit a superseded fact in place, never delete it — the
+  old belief and the date it died are themselves data.
 
 ## Sync rules
 

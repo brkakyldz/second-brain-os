@@ -18,3 +18,7 @@ desktop.ini
 
 # automation noise — durable but not vault content
 _brain/logs/.automation.log
+scripts/.brain.lock
+
+# agent worktrees — never tracked in main
+.claude/worktrees/

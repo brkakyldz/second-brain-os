@@ -1,0 +1,312 @@
+#!/usr/bin/env node
+// link-sweep.mjs — B2: weekly broken-wikilink / orphan-note / dangling-pointer
+// sweep. Node stdlib only, no dependencies.
+//
+// Scans every .md file in the vault (excluding .git/, .claude/, .obsidian/,
+// archive/, which are never treated as link sources) for:
+//   1. Broken [[wikilinks]] — target not found by filename or alias.
+//   2. Orphan notes — no inbound AND no outbound resolved wikilinks, further
+//      excluding _brain/logs/, daily/, archive/, inbox/ from being reported
+//      (they're episodic/log content, not part of the linked graph).
+//   3. Dangling pointer lines in _brain/MEMORY.md (a "-> [[...]]" pointer
+//      whose target does not exist).
+//
+// Writes a report to _brain/logs/YYYY-MM-DD_link-sweep.md.
+//
+// Kill criterion (per the Phase B plan): orphan count flat for a month.
+
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(__dirname, '..');
+
+// Directories never walked as link sources at all.
+const EXCLUDE_FROM_SCAN = new Set(['.git', '.claude', '.obsidian', 'archive']);
+
+// Additional directories excluded only from *orphan reporting* (still
+// scanned and still part of the link graph — other notes may legitimately
+// link into/out of them).
+const EXCLUDE_FROM_ORPHAN_REPORT = ['_brain/logs', 'daily', 'inbox'];
+
+function toPosix(p) {
+  return p.split(path.sep).join('/');
+}
+
+function walk(dir, out) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (EXCLUDE_FROM_SCAN.has(entry.name)) continue;
+      walk(full, out);
+    } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+      out.push(full);
+    }
+  }
+}
+
+const allFiles = [];
+walk(REPO_ROOT, allFiles);
+
+// --- Minimal frontmatter parsing (flat YAML: scalars + simple lists) -------
+
+function parseFrontmatter(content) {
+  if (!content.startsWith('---')) return { frontmatter: {}, body: content };
+  const end = content.indexOf('\n---', 3);
+  if (end === -1) return { frontmatter: {}, body: content };
+  const fmBlock = content.slice(3, end).trim();
+  const bodyStart = content.indexOf('\n', end + 1);
+  const body = bodyStart === -1 ? '' : content.slice(bodyStart + 1);
+
+  const fm = {};
+  let currentKey = null;
+  for (const line of fmBlock.split(/\r?\n/)) {
+    const listItem = line.match(/^\s*-\s*(.+)$/);
+    if (listItem && currentKey) {
+      fm[currentKey] = fm[currentKey] || [];
+      fm[currentKey].push(listItem[1].trim().replace(/^["']|["']$/g, ''));
+      continue;
+    }
+    const kv = line.match(/^([A-Za-z0-9_]+):\s*(.*)$/);
+    if (kv) {
+      currentKey = kv[1];
+      const val = kv[2].trim();
+      if (val === '') {
+        fm[currentKey] = fm[currentKey] || [];
+      } else if (val.startsWith('[') && val.endsWith(']')) {
+        fm[currentKey] = val
+          .slice(1, -1)
+          .split(',')
+          .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+          .filter(Boolean);
+      } else {
+        fm[currentKey] = val.replace(/^["']|["']$/g, '');
+      }
+    }
+  }
+  return { frontmatter: fm, body };
+}
+
+// [[target]], [[target|alias text]], [[target#heading]] — capture target only.
+const WIKILINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g;
+
+// Strip fenced code blocks, inline code spans, and HTML comments before
+// looking for wikilinks: this vault's own docs (CLAUDE.md, OPEN_QUESTIONS.md,
+// this repo's scripts/README.md, MEMORY.md's format comment) illustrate the
+// `[[wikilink]]` syntax itself inside backticks/comments — those are prose
+// examples, not real links, and would otherwise show up as false "broken
+// wikilink" noise.
+function stripNonContent(text) {
+  return text
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`[^`\n]*`/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+}
+
+function extractLinkTargets(text) {
+  const targets = [];
+  let m;
+  const cleaned = stripNonContent(text);
+  WIKILINK_RE.lastIndex = 0;
+  while ((m = WIKILINK_RE.exec(cleaned)) !== null) {
+    targets.push(m[1].trim());
+  }
+  return targets;
+}
+
+// --- Build resolution index -------------------------------------------------
+
+const notes = [];
+const byRelPathNoExt = new Map(); // lowercase rel path w/o .md -> relPath
+const byBasename = new Map(); // lowercase basename w/o .md -> [relPath, ...]
+const byAlias = new Map(); // lowercase alias -> [relPath, ...]
+
+for (const full of allFiles) {
+  const relPath = toPosix(path.relative(REPO_ROOT, full));
+  let content;
+  try {
+    content = readFileSync(full, 'utf8');
+  } catch {
+    continue;
+  }
+  const { frontmatter } = parseFrontmatter(content);
+  const linkTargets = extractLinkTargets(content);
+  notes.push({ relPath, frontmatter, linkTargets });
+
+  const noExt = relPath.replace(/\.md$/i, '');
+  byRelPathNoExt.set(noExt.toLowerCase(), relPath);
+
+  const base = path.posix.basename(noExt).toLowerCase();
+  if (!byBasename.has(base)) byBasename.set(base, []);
+  byBasename.get(base).push(relPath);
+
+  const aliases = frontmatter.aliases || frontmatter.alias;
+  if (aliases) {
+    const list = Array.isArray(aliases) ? aliases : [aliases];
+    for (const a of list) {
+      const key = String(a).toLowerCase();
+      if (!byAlias.has(key)) byAlias.set(key, []);
+      byAlias.get(key).push(relPath);
+    }
+  }
+}
+
+function resolveTarget(rawTarget) {
+  let t = rawTarget.trim().replace(/\\/g, '/');
+  t = t.replace(/\.md$/i, '');
+  let tLower = t.toLowerCase();
+  tLower = tLower.replace(/^\.?\//, '');
+
+  if (byRelPathNoExt.has(tLower)) return [byRelPathNoExt.get(tLower)];
+
+  const baseKey = path.posix.basename(tLower);
+  if (byBasename.has(baseKey)) return byBasename.get(baseKey);
+
+  if (byAlias.has(tLower)) return byAlias.get(tLower);
+
+  return null;
+}
+
+// --- 1. Broken wikilinks -----------------------------------------------------
+
+const brokenLinks = [];
+for (const note of notes) {
+  for (const target of note.linkTargets) {
+    if (resolveTarget(target) === null) {
+      brokenLinks.push({ source: note.relPath, target });
+    }
+  }
+}
+
+// --- 2. Orphan notes: build a resolved-link graph, then report --------------
+
+const outboundResolved = new Map();
+const inboundResolved = new Map();
+for (const note of notes) outboundResolved.set(note.relPath, new Set());
+
+for (const note of notes) {
+  for (const target of note.linkTargets) {
+    const resolved = resolveTarget(target);
+    if (!resolved) continue;
+    for (const r of resolved) {
+      if (r === note.relPath) continue; // self-links don't count
+      outboundResolved.get(note.relPath).add(r);
+      if (!inboundResolved.has(r)) inboundResolved.set(r, new Set());
+      inboundResolved.get(r).add(note.relPath);
+    }
+  }
+}
+
+function isExcludedFromOrphanReport(relPath) {
+  return EXCLUDE_FROM_ORPHAN_REPORT.some(
+    (prefix) => relPath === prefix || relPath.startsWith(prefix + '/')
+  );
+}
+
+const orphans = [];
+for (const note of notes) {
+  if (isExcludedFromOrphanReport(note.relPath)) continue;
+  const outCount = (outboundResolved.get(note.relPath) || new Set()).size;
+  const inCount = (inboundResolved.get(note.relPath) || new Set()).size;
+  if (outCount === 0 && inCount === 0) orphans.push(note.relPath);
+}
+
+// --- 3. Dangling pointers in _brain/MEMORY.md --------------------------------
+
+const memoryPath = path.join(REPO_ROOT, '_brain', 'MEMORY.md');
+const danglingPointers = [];
+if (existsSync(memoryPath)) {
+  const memContent = readFileSync(memoryPath, 'utf8');
+  // Strip the whole file first (its format comment at the top is multi-line
+  // and spans several raw lines), then re-split so line lookup below still
+  // reports the original line text for anything genuinely dangling.
+  const strippedWhole = stripNonContent(memContent);
+  const strippedLines = strippedWhole.split(/\r?\n/);
+  const rawLines = memContent.split(/\r?\n/);
+  for (let i = 0; i < strippedLines.length; i++) {
+    WIKILINK_RE.lastIndex = 0;
+    let m;
+    while ((m = WIKILINK_RE.exec(strippedLines[i])) !== null) {
+      const target = m[1].trim();
+      if (resolveTarget(target) === null) {
+        danglingPointers.push({ line: (rawLines[i] || strippedLines[i]).trim(), target });
+      }
+    }
+  }
+}
+
+// --- Report -------------------------------------------------------------------
+
+function fmtDate(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+const today = fmtDate(new Date());
+const lines = [];
+lines.push(`# Link Sweep — ${today}`);
+lines.push('');
+lines.push(
+  `Generated by \`scripts/link-sweep.mjs\` (B2). Scanned ${notes.length} markdown file(s), excluding \`.git/\`, \`.claude/\`, \`.obsidian/\`, \`archive/\`.`
+);
+lines.push('');
+lines.push('## Summary');
+lines.push('');
+lines.push(`- Broken wikilinks: ${brokenLinks.length}`);
+lines.push(`- Orphan notes: ${orphans.length}`);
+lines.push(`- Dangling MEMORY.md pointers: ${danglingPointers.length}`);
+lines.push('');
+
+lines.push('## Broken wikilinks');
+lines.push('');
+if (brokenLinks.length === 0) {
+  lines.push('None found.');
+} else {
+  for (const b of brokenLinks) {
+    lines.push(`- \`${b.source}\` → \`[[${b.target}]]\` (target not found)`);
+  }
+}
+lines.push('');
+
+lines.push('## Orphan notes');
+lines.push('');
+lines.push(
+  '(no inbound and no outbound resolved wikilinks; excludes `_brain/logs/`, `daily/`, `archive/`, `inbox/`)'
+);
+lines.push('');
+if (orphans.length === 0) {
+  lines.push('None found.');
+} else {
+  for (const o of orphans) {
+    lines.push(`- \`${o}\``);
+  }
+}
+lines.push('');
+
+lines.push('## Dangling MEMORY.md pointers');
+lines.push('');
+if (danglingPointers.length === 0) {
+  lines.push('None found.');
+} else {
+  for (const d of danglingPointers) {
+    lines.push(`- \`${d.line}\` → target \`${d.target}\` not found`);
+  }
+}
+lines.push('');
+
+const logDir = path.join(REPO_ROOT, '_brain', 'logs');
+if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+const reportPath = path.join(logDir, `${today}_link-sweep.md`);
+writeFileSync(reportPath, lines.join('\n'), 'utf8');
+
+console.log(
+  `link-sweep: scanned ${notes.length} file(s); ${brokenLinks.length} broken link(s), ${orphans.length} orphan(s), ${danglingPointers.length} dangling MEMORY.md pointer(s).`
+);
+console.log(`link-sweep: report written to ${toPosix(path.relative(REPO_ROOT, reportPath))}`);
