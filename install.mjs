@@ -12,6 +12,7 @@ import path from 'node:path';
 const CWD = process.cwd();
 const USER_MD = path.join(CWD, '_brain', 'USER.md');
 const IDENTITY_MD = path.join(CWD, '_brain', 'IDENTITY.md');
+const VAULT_MARKER = path.join(CWD, '_brain', '.vault-active');
 
 function banner() {
   console.log('');
@@ -169,6 +170,28 @@ function run(cmd, args, opts = {}) {
   });
 }
 
+// The hooks refuse to touch a directory that has no activation marker, so
+// this is the step that turns a clone into a live vault. Written last-ish,
+// and never rewritten on a re-run — the file's date is a real record.
+function writeVaultMarker() {
+  if (existsSync(VAULT_MARKER)) return false;
+  const body = [
+    'This file marks this directory as a live Second Brain vault.',
+    '',
+    'The hooks in .claude/hooks/ do nothing without it: no pull, no',
+    'checkpoint commit, no push, no Tier-0 context injection. That is what',
+    'keeps the public template repo — and a clone that has not been set up',
+    'yet — from committing and pushing itself.',
+    '',
+    'Commit it. It belongs to your vault, never to the template.',
+    '',
+    `Activated: ${new Date().toISOString().slice(0, 10)}`,
+    '',
+  ].join('\n');
+  writeFileSync(VAULT_MARKER, body, 'utf8');
+  return true;
+}
+
 function enableRerere() {
   try {
     run('git', ['config', 'rerere.enabled', 'true']);
@@ -277,6 +300,10 @@ async function main() {
 
   const wroteIdentity = writeIdentityMd(answers);
   if (wroteIdentity) console.log(`  Updated ${path.relative(CWD, IDENTITY_MD)}`);
+
+  if (writeVaultMarker()) {
+    console.log(`  Created ${path.relative(CWD, VAULT_MARKER)} — hooks are now live.`);
+  }
 
   enableRerere();
 

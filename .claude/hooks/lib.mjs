@@ -34,6 +34,22 @@ export function getRepoRoot(hookDir) {
 
 // Read stdin without ever hanging: the hook may receive a small JSON payload
 // on stdin, or nothing at all (manual invocation, empty pipe).
+// --- Activation gate ---------------------------------------------------
+// A directory is a *live* vault only once it has been personalized. The
+// marker is written by install.mjs / SETUP.md step 3 and committed to the
+// vault repo. Without it the hooks do nothing at all — which is what keeps
+// the public template repo, and a fresh clone that has not been set up yet,
+// from pulling, auto-committing, and auto-pushing itself.
+export const VAULT_MARKER = path.join('_brain', '.vault-active');
+
+export function isVaultActive(repoRoot) {
+  try {
+    return existsSync(path.join(repoRoot, VAULT_MARKER));
+  } catch {
+    return false;
+  }
+}
+
 export function readStdin(timeoutMs = 200) {
   return new Promise((resolve) => {
     let data = '';
@@ -311,6 +327,11 @@ export function checkBudgets(repoRoot, logTag) {
 // for the hook's stdout systemMessage.
 export function checkpointCommit(repoRoot, { eventLabel, sessionId, pushTimeoutMs, logTag }) {
   const messages = [];
+
+  // Load-bearing gate: never write to a directory that is not a live vault.
+  if (!isVaultActive(repoRoot)) {
+    return { committed: false, reason: 'not-a-vault', messages };
+  }
 
   const guard = checkGuards(repoRoot);
   if (guard.blocked) {

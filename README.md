@@ -28,7 +28,8 @@ Full design rationale: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ```
 _brain/           the memory core: IDENTITY.md, USER.md, MEMORY.md, OPEN_QUESTIONS.md, memory/,
-                  playbooks/, templates/, logs/
+                  playbooks/, templates/, logs/ — plus .vault-active, the marker that
+                  switches the hooks on (setup creates it; this template ships without it)
 projects/         one note per active project — goal, status, decisions
 knowledge/        atomic, wikilinked permanent notes (PKM layer)
 daily/            daily notes, YYYY-MM-DD.md
@@ -152,6 +153,12 @@ Git is the only database here on purpose — recovery and undo are free.
 an optional Windows Task Scheduler roster (backup verification, link sweeps, off-site bundles,
 scheduled `/triage`+`/curator`, daily resurfacing) for anyone who wants the deterministic parts
 running unattended — see `scripts/README.md`. Nothing registers itself; you opt in by hand.
+
+**Why doesn't anything happen when I run Claude Code in a fresh clone?** By design. The hooks
+check for `_brain/.vault-active` and no-op without it — no pull, no commit, no push, no context
+injection. Setup creates that file, and this template deliberately ships without one, so a clone
+you haven't personalized yet (or the template repo itself, if you're contributing to it) can
+never auto-commit and auto-push over your head. Create the file and the hooks come alive.
 
 **What happens if a memory file gets too big?** `MEMORY.md` and `USER.md` have explicit line
 budgets. Going over budget never silently truncates — the checkpoint hook warns loudly and

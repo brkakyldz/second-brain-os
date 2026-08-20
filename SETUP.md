@@ -107,6 +107,17 @@ In the new clone:
   - Converse with me in <language>; vault content stays in English.
   ```
   If they chose English, leave that line as-is.
+- **Activate the vault.** Create `_brain/.vault-active`. Until this file exists the hooks
+  deliberately do nothing — no pull, no checkpoint commit, no push, no context injection —
+  which is what stops an unpersonalized clone (or the template repo itself) from committing
+  and pushing over the user's head. Any content is fine; this explains itself to whoever
+  finds it later:
+  ```
+  This file marks this directory as a live Second Brain vault.
+  The hooks in .claude/hooks/ do nothing without it. Commit it — it belongs
+  to your vault, never to the template.
+  Activated: YYYY-MM-DD
+  ```
 
 ## Step 4 — git setup
 
@@ -215,7 +226,8 @@ Use whichever form matches the shell you're actually running in:
 
 Check the printed JSON: `hookSpecificOutput.additionalContext` should contain the user's name
 from `_brain/USER.md`. If it doesn't, stop and investigate before telling your user setup is
-done.
+done. **Empty output with exit code 0 means `_brain/.vault-active` is missing** — go back and
+finish Step 3.
 
 Tell your user they can now, optionally:
 

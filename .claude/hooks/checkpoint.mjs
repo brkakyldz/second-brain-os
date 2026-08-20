@@ -10,6 +10,7 @@ import {
   parseHookInput,
   logLine,
   checkpointCommit,
+  isVaultActive,
 } from './lib.mjs';
 
 const __dirname = thisDir(import.meta.url);
@@ -31,6 +32,13 @@ async function main() {
   const input = parseHookInput(raw);
   const repoRoot = getRepoRoot(__dirname);
   const eventLabel = eventLabelFor(input.hook_event_name);
+
+  // Inactive directory (the template itself, or a clone that has not been
+  // set up yet): do nothing, quietly. Logged nowhere — an inactive vault
+  // gets no files written into it, not even a log line.
+  if (!isVaultActive(repoRoot)) {
+    process.exit(0);
+  }
 
   logLine(repoRoot, LOG_TAG, `run started (event=${input.hook_event_name || 'unknown'})`);
 

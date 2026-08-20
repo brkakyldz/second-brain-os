@@ -32,6 +32,21 @@ function getRepoRoot() {
   return path.resolve(__dirname, '../..');
 }
 
+// A directory is a *live* vault only once it has been personalized. The
+// marker is written by install.mjs / SETUP.md step 3 and committed to the
+// vault repo. Without it this hook does nothing — no pull, no context — so
+// the public template repo (and a clone that has not been set up yet) never
+// injects its own empty Tier-0 files or touches git. In global brain mode
+// the user-level hook still runs against the real vault, which does have
+// the marker, so working *on* the template still gets the real brain.
+function isVaultActive(repoRoot) {
+  try {
+    return existsSync(path.join(repoRoot, '_brain', '.vault-active'));
+  } catch {
+    return false;
+  }
+}
+
 // The session's own project dir — the cwd Claude Code is actually working
 // in for this session. Distinct from the brain root above: when running in
 // global mode this will differ from the brain root for every project except
@@ -254,6 +269,11 @@ function emit(additionalContext) {
 async function main() {
   await readStdin();
   const repoRoot = getRepoRoot();
+
+  if (!isVaultActive(repoRoot)) {
+    process.exit(0);
+  }
+
   const projectDir = getProjectDir();
   logLine(repoRoot, 'run started');
 

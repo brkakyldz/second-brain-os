@@ -59,6 +59,7 @@ These are the load-bearing decisions. Everything else follows from them.
 your-brain/                    # private GitHub repo = Obsidian vault = the brain
 ├── CLAUDE.md                  # conventions & rules for the agent (< 150 lines, hard budget)
 ├── _brain/                    # the memory core (agent-managed, human-auditable)
+│   ├── .vault-active          # activation marker — without it every hook is a no-op (§ 3.8)
 │   ├── IDENTITY.md            # how the assistant behaves here (persona, tone, rules of engagement)
 │   ├── USER.md                # who the user is: role, preferences, working style   [budget ~40 lines]
 │   ├── MEMORY.md              # index of durable facts, one line each + pointer     [budget ~100 lines]
@@ -175,6 +176,25 @@ jobs never race. This keeps deterministic, no-judgment work off the LLM budget e
 `scripts/README.md` for the full roster and kill criteria per job. None of it is required: every
 job it automates can also be run manually or skipped.
 
+### 3.8 The activation gate
+
+Every hook above first checks for `_brain/.vault-active` and exits 0, silently, if it is
+missing. Setup creates the marker; this template ships without one.
+
+The reason is that the hooks are indiscriminate by design — `git add -A`, commit, push, on
+every turn — which is exactly right for a vault and exactly wrong for anything else. Without
+a gate, cloning this template to *work on the template*, or opening a clone before
+personalizing it, wires those hooks to `${CLAUDE_PROJECT_DIR}` and the repo starts committing
+and pushing itself, while injecting its own empty `IDENTITY.md`/`USER.md`/`MEMORY.md` as if
+they were memory. In global brain mode (§ 3.4) it also shadows the real vault: the placeholder
+Tier-0 files land in context instead of the real ones.
+
+The marker draws the line where it actually belongs — not "does this folder look like a
+vault?" but "has someone deliberately made this folder *their* vault?". A directory can look
+identical to a vault and still not be one; only provisioning settles it. Being an explicit
+committed file, it travels with the vault to every machine and is visible in `git log` the
+day it was created.
+
 ## 4. The two repositories
 
 This project follows a two-repository model:
@@ -198,6 +218,7 @@ personalization happens entirely inside your own private repository, never in th
 | 4 | Hook trio `SessionStart`/`Stop`/`SessionEnd` + `PreCompact`, Node `.mjs`, fail-open | Matches documented reliability limits; cross-platform without shell fragmentation |
 | 5 | Mobile is read + capture only | Mobile git is the documented weak link; scope discipline over parity |
 | 6 | Public template / private brain, two repos | Shareable without leaking personal data |
+| 7 | Hooks gated on an explicit `_brain/.vault-active` marker | A folder that looks like a vault isn't one; only provisioning makes it one (§ 3.8) |
 
 ## 6. Out of scope (deliberately)
 
