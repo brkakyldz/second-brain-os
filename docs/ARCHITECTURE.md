@@ -76,7 +76,8 @@ your-brain/                    # private GitHub repo = Obsidian vault = the brai
 └── .claude/
     ├── settings.json          # hook wiring (committed, shared across devices)
     ├── hooks/                 # Node.js .mjs hook scripts (cross-platform)
-    └── skills/                # the (few) skills: curator, triage
+    └── skills/                # curator, triage (ours) + obsidian-markdown
+                               #   (vendored, MIT — see THIRD_PARTY_LICENSES.md)
 ```
 
 The `_brain/` split is deliberate: **IDENTITY** (persona) / **USER** (relationship memory) /

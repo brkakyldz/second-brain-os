@@ -36,7 +36,8 @@ inbox/            quick capture, triaged later
 archive/          closed projects and stale notes — never deleted, always moved here
 scripts/          optional automation roster (backup verify, link sweep, off-site bundle,
                   scheduled triage/curator, daily resurfacing) — see scripts/README.md
-.claude/          hooks (session-start, checkpoint, session-end) + skills (curator, triage)
+.claude/          hooks (session-start, checkpoint, session-end) + skills (curator, triage,
+                  plus vendored obsidian-markdown)
 SETUP.md          agent-run installation runbook — see Quickstart
 install.mjs       one-time interactive setup for your personalized clone (manual path)
 docs/             architecture and mobile-usage guides

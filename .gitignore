@@ -22,3 +22,6 @@ scripts/.brain.lock
 
 # agent worktrees — never tracked in main
 .claude/worktrees/
+
+# working reports — belong to the private build repo, not the template
+reports/
