@@ -6,11 +6,11 @@ description: Files inbox/ captures into their proper vault locations with correc
 # Triage
 
 Empties `inbox/` by filing each capture where it belongs, with correct
-frontmatter. Run after mobile or quick-capture sessions add files there.
+frontmatter. Run after quick-capture sessions add files there.
 
 ## Standing rule — captures are always new files, never edits
 
-Every capture path (desktop, mobile, bridge, automation) writes a **brand-new
+Every capture path (manual, agent, automation) writes a **brand-new
 file with a unique name** into `inbox/`. No capture ever edits an existing
 note. This is what makes concurrent capture structurally conflict-immune —
 two devices appending to one file is a merge conflict; two devices creating

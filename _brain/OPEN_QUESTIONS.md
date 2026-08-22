@@ -36,4 +36,3 @@ a note nobody reads again.
 
 | ID | Question | status | project | related |
 |---|---|---|---|---|
-| Q-03 | Is a second sync mechanism (mobile capture) actually needed yet? | open | — | — |

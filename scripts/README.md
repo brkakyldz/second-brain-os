@@ -119,7 +119,7 @@ just documents that B4's script-side requirement is already in place.
    Windows Task Scheduler entries under `\SecondBrain\` (B1, B2, B3, B5 daily/
    weekly as documented above, B6 daily).
 4. **B9 — rotate to a fine-grained PAT.** Replace any classic GitHub PAT used
-   by this vault's automation (or by future mobile-capture bridges) with a
+   by this vault's automation with a
    **fine-grained personal access token scoped to one repo
    (`<your-github-user>/<your-vault-repo>`) with Contents read/write only**
    — no other repos, no other permissions. Retire the classic PAT afterwards

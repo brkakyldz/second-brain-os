@@ -243,7 +243,7 @@ Wrap up by telling your user, concretely:
 - Which brain scope they chose (global or project-only) and what that means day to day — global
   means every Claude Code session on this machine loads and records into this brain;
   project-only means it's only active inside this vault folder.
-- That mobile capture goes through the `inbox/` folder — point them at `docs/MOBILE.md` for how.
+- That quick, untriaged captures go into the `inbox/` folder and get filed later with `/triage`.
 - That `/triage` and `/curator` are available as slash commands inside a Claude Code session in
   the vault, for filing inbox items and consolidating memory respectively.
 - That `_brain/OPEN_QUESTIONS.md` is a routing table for open questions, seeded with placeholder

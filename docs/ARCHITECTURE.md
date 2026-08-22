@@ -71,7 +71,7 @@ your-brain/                    # private GitHub repo = Obsidian vault = the brai
 ├── projects/                  # one note (or folder) per active project: goal, status, decisions
 ├── knowledge/                 # PKM layer: atomic, wikilinked permanent notes
 ├── daily/                     # daily notes, YYYY-MM-DD.md
-├── inbox/                     # quick capture (mobile writes land here; triaged later)
+├── inbox/                     # quick capture, untriaged; filed properly later
 ├── archive/                   # closed projects, stale notes — never deleted, always archived
 ├── scripts/                   # optional deterministic automation roster (see § 3.7)
 └── .claude/
@@ -128,11 +128,6 @@ Log entries use a fixed taxonomy: `decision | bugfix | feature | discovery | pre
 - **Single-user conflict strategy:** `git pull --rebase --autostash` + `git rerere` enabled.
   `merge=union` only for the append-only `_brain/logs/` path. Never auto-push if a
   rebase exited non-zero or conflict markers remain — a garbled auto-merge must not propagate.
-- **Mobile = read + quick capture, by design.** Mobile git is the field's documented weak link
-  (Android FUSE storage corrupts `.git`; the workaround needs Termux + `--separate-git-dir`).
-  Reading happens via the GitHub app or Obsidian+git-sync where set up; capture lands in
-  `inbox/` (GitHub app file edit = a commit) and a triage skill files it properly later. See
-  `docs/MOBILE.md`.
 - **One sync mechanism per vault, ever.** Git + iCloud/Drive/Syncthing on the same folder is a
   documented cause of repo corruption.
 
@@ -216,9 +211,8 @@ personalization happens entirely inside your own private repository, never in th
 | 2 | Vault-native Markdown is canonical; Claude's auto memory stays local scratch | Tool-agnostic, transparent, no internal-format coupling |
 | 3 | Five-way memory split with hard budgets | Bounded always-loaded core is the convergent pattern; loud failure forces curation |
 | 4 | Hook trio `SessionStart`/`Stop`/`SessionEnd` + `PreCompact`, Node `.mjs`, fail-open | Matches documented reliability limits; cross-platform without shell fragmentation |
-| 5 | Mobile is read + capture only | Mobile git is the documented weak link; scope discipline over parity |
-| 6 | Public template / private brain, two repos | Shareable without leaking personal data |
-| 7 | Hooks gated on an explicit `_brain/.vault-active` marker | A folder that looks like a vault isn't one; only provisioning makes it one (§ 3.8) |
+| 5 | Public template / private brain, two repos | Shareable without leaking personal data |
+| 6 | Hooks gated on an explicit `_brain/.vault-active` marker | A folder that looks like a vault isn't one; only provisioning makes it one (§ 3.8) |
 
 ## 6. Out of scope (deliberately)
 
@@ -226,4 +220,3 @@ personalization happens entirely inside your own private repository, never in th
 - Vector search / embeddings / RAG chat — grep + links + a curated index cover the need; any
   of these can be layered on later without changing the storage model.
 - Multi-user collaboration — this is a single-person brain; Git makes sharing possible later.
-- Full mobile write parity — see decision 5.

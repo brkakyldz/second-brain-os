@@ -41,7 +41,7 @@ scripts/          optional automation roster (backup verify, link sweep, off-sit
                   plus vendored obsidian-markdown)
 SETUP.md          agent-run installation runbook — see Quickstart
 install.mjs       one-time interactive setup for your personalized clone (manual path)
-docs/             architecture and mobile-usage guides
+docs/             architecture guide
 ```
 
 Everything here is plain Markdown, JSON, and Node — no build step, no runtime dependency
@@ -87,10 +87,9 @@ to research something, plan a project, write a note, remember a decision. It rea
 the same Markdown files you see in Obsidian, and checkpoints its own work as commits every
 turn.
 
-When you're away from your desktop, capture into `inbox/` from your phone (the GitHub mobile
-app makes any edit a commit — see [`docs/MOBILE.md`](docs/MOBILE.md)). Next desktop session,
-run `/triage` to file everything properly, and run `/curator` periodically (or on a schedule)
-to consolidate memory, resolve stale facts, and keep core files inside their size budgets.
+Quick, half-formed thoughts go into `inbox/` as they come. Later, run `/triage` to file them
+properly, and run `/curator` periodically (or on a schedule) to consolidate memory, resolve
+stale facts, and keep core files inside their size budgets.
 
 ## Global mode (recommended)
 
@@ -138,7 +137,7 @@ another moving part to keep in sync. Nothing here stops you from layering search
 — it just isn't required to get value on day one.
 
 **Can I use it without Obsidian?** Yes. The vault is plain Markdown and YAML frontmatter; any
-editor works. Obsidian adds backlinks, graph view, and mobile reading, but it's not load-bearing.
+editor works. Obsidian adds backlinks and graph view, but it's not load-bearing.
 
 **What if I work offline?** Everything works locally. `SessionStart` tries to pull and
 `Stop`/`SessionEnd` try to push, but both fail open — a failed pull means you work from local
@@ -168,5 +167,3 @@ asks you to run `/curator` to consolidate.
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full design: principles, the memory model,
   the hook loop, sync strategy, and the reasoning behind each decision.
-- [`docs/MOBILE.md`](docs/MOBILE.md) — the read + quick-capture model, and an advanced,
-  at-your-own-risk guide to full mobile git sync on iOS and Android.
