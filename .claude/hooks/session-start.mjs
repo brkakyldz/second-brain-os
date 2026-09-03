@@ -5,13 +5,21 @@
 import { execFileSync } from 'node:child_process';
 import {
   readFileSync,
-  appendFileSync,
   existsSync,
-  mkdirSync,
-  readdirSync,
 } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  budgetUsage,
+  enterBrainLock,
+  exitBrainLock,
+  isVaultActive,
+  logLine as libLogLine,
+  spawnFlush,
+  pendingFlushSessions,
+  maintenanceDueLine,
+  FLUSH_MIN_TURNS,
+} from './lib.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,21 +38,6 @@ function getRepoRoot() {
   }
   // script lives at <repoRoot>/.claude/hooks/session-start.mjs
   return path.resolve(__dirname, '../..');
-}
-
-// A directory is a *live* vault only once it has been personalized. The
-// marker is written by install.mjs / SETUP.md step 3 and committed to the
-// vault repo. Without it this hook does nothing — no pull, no context — so
-// the public template repo (and a clone that has not been set up yet) never
-// injects its own empty Tier-0 files or touches git. In global brain mode
-// the user-level hook still runs against the real vault, which does have
-// the marker, so working *on* the template still gets the real brain.
-function isVaultActive(repoRoot) {
-  try {
-    return existsSync(path.join(repoRoot, '_brain', '.vault-active'));
-  } catch {
-    return false;
-  }
 }
 
 // The session's own project dir — the cwd Claude Code is actually working
@@ -91,19 +84,11 @@ function readStdin(timeoutMs = 200) {
   });
 }
 
-function timestamp() {
-  return new Date().toISOString();
-}
-
-function logLine(repoRoot, line) {
-  try {
-    const logDir = path.join(repoRoot, '_brain', 'logs');
-    if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
-    const logPath = path.join(logDir, '.automation.log');
-    appendFileSync(logPath, `[${timestamp()}] SessionStart: ${line}\n`, 'utf8');
-  } catch {
-    // Logging must never throw or block the hook.
-  }
+// Delegates to lib's writer so this hook gets the same log rotation and
+// severity levels as the rest — it used to hand-roll an identical append and
+// so was the one path that could grow .automation.log without bound.
+function logLine(repoRoot, line, level) {
+  libLogLine(repoRoot, 'SessionStart', line, level);
 }
 
 function summarizeError(err) {
@@ -123,6 +108,7 @@ function getGitDir(repoRoot) {
       cwd: repoRoot,
       timeout: 10000,
       encoding: 'utf8',
+      windowsHide: true,
     }).trim();
     return path.isAbsolute(out) ? out : path.join(repoRoot, out);
   } catch {
@@ -130,19 +116,37 @@ function getGitDir(repoRoot) {
   }
 }
 
-// Runs `git pull --rebase --autostash`. Never throws. Returns
-// { ok: boolean, warning: string|null }. On failure, checks for a
+// Runs `git pull --rebase --autostash` under the shared brain lock. Never
+// throws. Returns { ok, skipped, warning }. On failure, checks for a
 // stuck/conflicted rebase and aborts it so the tree is never left mid-rebase.
+//
+// The lock matters here: every Claude Code session on this machine runs this
+// hook against the one vault repo, and two concurrent pulls both write
+// .git/FETCH_HEAD, leaving it with several for-merge entries - which is what
+// "fatal: Cannot rebase onto multiple branches" actually is. A skipped pull is
+// harmless: the job holding the lock is pulling the same repo right now.
 function runGitPull(repoRoot) {
+  if (!enterBrainLock(repoRoot, 'SessionStart', 'SessionStart')) {
+    return { ok: false, skipped: true, warning: null };
+  }
+  try {
+    return pullUnderLock(repoRoot);
+  } finally {
+    exitBrainLock(repoRoot);
+  }
+}
+
+function pullUnderLock(repoRoot) {
   try {
     execFileSync('git', ['pull', '--rebase', '--autostash'], {
       cwd: repoRoot,
       timeout: 25000,
       stdio: ['ignore', 'pipe', 'pipe'],
       encoding: 'utf8',
+      windowsHide: true,
     });
     logLine(repoRoot, 'pull ok');
-    return { ok: true, warning: null };
+    return { ok: true, skipped: false, warning: null };
   } catch (err) {
     const reason = summarizeError(err);
     logLine(repoRoot, `pull failed: ${reason}`);
@@ -152,6 +156,7 @@ function runGitPull(repoRoot) {
         cwd: repoRoot,
         timeout: 10000,
         encoding: 'utf8',
+        windowsHide: true,
       });
       const hasConflictMarkerStatus = /^(UU|AA|DD|AU|UA|UD|DU) /m.test(status);
       const gitDir = getGitDir(repoRoot);
@@ -166,6 +171,7 @@ function runGitPull(repoRoot) {
             cwd: repoRoot,
             timeout: 10000,
             encoding: 'utf8',
+            windowsHide: true,
           });
           logLine(repoRoot, 'conflict detected — rebase aborted, tree restored');
         } catch (abortErr) {
@@ -176,27 +182,13 @@ function runGitPull(repoRoot) {
       logLine(repoRoot, `git status check failed: ${summarizeError(statusErr)}`);
     }
 
-    return { ok: false, warning: reason };
+    return { ok: false, skipped: false, warning: reason };
   }
 }
 
 function readFileSafe(p) {
   try {
     return readFileSync(p, 'utf8');
-  } catch {
-    return null;
-  }
-}
-
-function findLatestSessionLog(logsDir) {
-  try {
-    const entries = readdirSync(logsDir);
-    const pattern = /^\d{4}-\d{2}-\d{2}_\d{4}\.md$/;
-    const matches = entries.filter((f) => pattern.test(f));
-    if (matches.length === 0) return null;
-    matches.sort();
-    matches.reverse();
-    return matches[0];
   } catch {
     return null;
   }
@@ -214,7 +206,9 @@ function buildContext(repoRoot, pullResult, projectDir) {
   if (isOutsideVault) {
     header += `\nCurrent project: ${projectDir}`;
   }
-  if (!pullResult.ok) {
+  // A skipped pull is not a failure worth a banner - the lock holder is
+  // pulling the same repo. Only a real failure gets surfaced to the model.
+  if (!pullResult.ok && !pullResult.skipped) {
     header += `\n⚠ git pull failed (${pullResult.warning}) — working from local state`;
   }
   sections.push(header);
@@ -225,35 +219,76 @@ function buildContext(repoRoot, pullResult, projectDir) {
         '### Global brain mode — standing rules',
         `You are working outside the brain vault. The brain lives at ${repoRoot}.`,
         'When substantial learnings, decisions, or durable facts emerge in this session,',
-        `append a session-log entry to ${path.join(repoRoot, '_brain', 'logs', 'YYYY-MM-DD_HHMM.md')}`,
+        `append a session-log entry to ${path.join(repoRoot, 'logs', 'YYYY-MM-DD_HHMM.md')}`,
         '(taxonomy: decision|bugfix|feature|discovery|preference|change, and name the',
-        `project it came from) and update ${path.join(repoRoot, '_brain', 'MEMORY.md')} if a durable`,
-        'fact emerged (one line, budget 100, pointer style). Never write brain content',
+        `project it came from) and update ${path.join(repoRoot, 'core', 'MEMORY.md')} if a durable`,
+        'fact emerged (one line, 4000-char budget, pointer style). Never write brain content',
         "into the current project's repo, and never commit the current project's files",
         'into the brain.',
       ].join('\n')
     );
   }
 
-  const coreFiles = ['IDENTITY.md', 'USER.md', 'MEMORY.md'];
+  // Payload budget: the harness persists hook output above ~10KB to a side
+  // file and injects only a ~2KB preview — an oversized payload silently
+  // un-loads Tier 0. Outside the vault only USER + MEMORY are inlined
+  // (IDENTITY and OPEN_QUESTIONS are vault-internal); inside, OPEN_QUESTIONS
+  // is a pointer and the log tail is dropped to stay under the threshold.
+  const coreFiles = isOutsideVault
+    ? ['USER.md', 'MEMORY.md']
+    : ['IDENTITY.md', 'USER.md', 'MEMORY.md'];
+  // Each budgeted file is headed by its own usage, so the agent knows how much
+  // room it has left *before* it writes (ADR 0030). The session-end warning
+  // arrives after the damage; this arrives before it. Fail-open (ADR 0004):
+  // a meter that cannot be computed costs a label, never the payload.
+  let usage = [];
+  try {
+    usage = budgetUsage(repoRoot);
+  } catch {
+    usage = [];
+  }
   for (const name of coreFiles) {
-    const content = readFileSafe(path.join(repoRoot, '_brain', name));
-    if (content !== null) {
-      sections.push(`### ${name}\n${content.trimEnd()}`);
-    }
+    const content = readFileSafe(path.join(repoRoot, 'core', name));
+    if (content === null) continue;
+    const b = usage.find((u) => u.file === name);
+    const over = b && b.count > b.limit;
+    const meter = b
+      ? ` — ${b.count}/${b.limit} chars (${b.pct}%)` +
+        (over ? ' ⚠ OVER BUDGET, consolidate before adding' : '')
+      : '';
+    sections.push(`### ${name}${meter}\n${content.trimEnd()}`);
   }
 
-  const logsDir = path.join(repoRoot, '_brain', 'logs');
-  const latestLog = findLatestSessionLog(logsDir);
-  if (latestLog) {
-    const content = readFileSafe(path.join(logsDir, latestLog));
-    if (content !== null) {
-      const tailLines = content.split('\n').slice(-40).join('\n').trimEnd();
-      sections.push(`### Last session log (tail): ${latestLog}\n${tailLines}`);
-    }
+  if (!isOutsideVault) {
+    sections.push(
+      `### OPEN_QUESTIONS.md\nNot inlined — read ${path.join(repoRoot, 'core', 'OPEN_QUESTIONS.md')} before planning vault work.`
+    );
   }
 
-  return sections.join('\n\n');
+  // The replacement for the retired scheduled jobs (ADR 0033). One line, at
+  // most once a day, and nothing at all when nothing is due — a line that
+  // always appears stops being read. Shown in every project, not only the
+  // vault: unattended maintenance is gone, so the only moment left to notice
+  // is whichever session the owner happens to open.
+  const due = maintenanceDueLine(repoRoot);
+  if (due) {
+    sections.push(
+      `### Maintenance
+${due}
+Run the matching pass when convenient — nothing is scheduled any more.`
+    );
+    logLine(repoRoot, `maintenance due line shown: ${due}`);
+  }
+
+  const payload = sections.join('\n\n');
+  if (Buffer.byteLength(payload, 'utf8') > 9500) {
+    logLine(
+      repoRoot,
+      `context payload ${Buffer.byteLength(payload, 'utf8')}B nears the ~10KB persisted-output threshold — trim core/ before Tier 0 stops loading`,
+      'warn'
+    );
+  }
+  return payload;
 }
 
 function emit(additionalContext) {
@@ -266,28 +301,65 @@ function emit(additionalContext) {
   process.stdout.write(JSON.stringify(output));
 }
 
-async function main() {
-  await readStdin();
-  const repoRoot = getRepoRoot();
+// Catch-up for the flush mechanism. The SessionEnd spawn is the fast path but
+// not a guaranteed one — it fires while the process is being torn down, so a
+// child that has not got going yet can die with its parent. Here there is no
+// such race, and a session that slipped through is at most one session late.
+//
+// Bounded to two calls: the point is that nothing is lost, not that a backlog
+// is cleared in one morning, and each call costs a Haiku summarization.
+const SWEEP_MAX = 2;
+const SWEEP_MIN_TURNS = FLUSH_MIN_TURNS;
+const SWEEP_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 
-  if (!isVaultActive(repoRoot)) {
-    process.exit(0);
+function sweepPendingFlushes(repoRoot, currentSid) {
+  try {
+    const now = Date.now();
+    const due = pendingFlushSessions(repoRoot, { excludeSid: currentSid })
+      .filter((s) => s.turns >= SWEEP_MIN_TURNS && now - s.startedAt.getTime() <= SWEEP_MAX_AGE_MS)
+      .slice(0, SWEEP_MAX);
+    for (const s of due) {
+      spawnFlush(repoRoot, { sessionId: s.sid, logTag: 'SessionStart' });
+    }
+  } catch (err) {
+    // A sweep that fails must never cost the user their session start.
+    libLogLine(repoRoot, 'SessionStart', `flush sweep failed: ${err && err.message}`, 'WARN');
   }
+}
 
+async function main() {
+  const raw = await readStdin();
+  let currentSid = null;
+  try {
+    currentSid = (JSON.parse(raw || '{}') || {}).session_id || null;
+  } catch {
+    // no session id — the sweep just cannot exclude the current session
+  }
+  const repoRoot = getRepoRoot();
   const projectDir = getProjectDir();
   logLine(repoRoot, 'run started');
+
+  if (!isVaultActive(repoRoot)) {
+    logLine(repoRoot, 'no core/.vault-active marker — inert, no pull and no context injected');
+    process.exit(0);
+  }
 
   const pullResult = runGitPull(repoRoot);
   const context = buildContext(repoRoot, pullResult, projectDir);
 
   emit(context);
+  sweepPendingFlushes(repoRoot, currentSid);
   process.exit(0);
 }
 
 main().catch((err) => {
   try {
     const repoRoot = getRepoRoot();
-    logLine(repoRoot, `unexpected error: ${err && err.stack ? err.stack.split('\n')[0] : String(err)}`);
+    logLine(
+      repoRoot,
+      `unexpected error: ${err && err.stack ? err.stack.split('\n')[0] : String(err)}`,
+      'ERROR'
+    );
   } catch {
     // ignore — logging must never throw
   }

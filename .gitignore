@@ -1,5 +1,6 @@
 # Obsidian per-device state
 .obsidian/workspace*
+.obsidian/graph.json
 .obsidian/cache/
 .trash/
 
@@ -17,11 +18,24 @@ desktop.ini
 *secret*
 
 # automation noise — durable but not vault content
-_brain/logs/.automation.log
+logs/.automation.log*
 scripts/.brain.lock
 
 # agent worktrees — never tracked in main
 .claude/worktrees/
 
-# working reports — belong to the private build repo, not the template
-reports/
+# machine state lives off the tracked tree (ADR 0032) — every file below is
+# derived, per machine and rebuild-tolerant. If a hook needs a counter, this is
+# where it goes; the durable half of the record is a ledger line in logs/.
+.claude/.access.json
+.claude/.sessions.json
+.claude/.flush-*.lock
+.claude/*.tmp
+.claude/.maintenance.json
+scripts/.last-rollup
+scripts/.last-push
+
+# the marker that switches the hooks on — created by setup, per clone, and
+# deliberately never committed, so a fresh clone stays inert until it has been
+# personalized (ADR 0014)
+core/.vault-active

@@ -1,169 +1,199 @@
 # Second Brain OS
 
-A second brain that is an Obsidian vault, a Claude Code memory, and a git repository, all at
-once. **Git is the only database** — no SQLite, no vector store, no server, no plugin
-dependency chain. Your assistant knows who you are and what you're working on the moment a
-session starts, and automatically writes down what it learned before the session ends —
-committed, with no manual steps.
+A second brain that is an Obsidian vault, a Claude Code memory, and a git
+repository, all at once. **Git is the only database** — no SQLite, no vector
+store, no server, no plugin dependency chain. Your assistant knows who you are
+and what you're working on the moment a session starts, and writes down what it
+learned before the session ends — committed, with no manual steps.
+
+This is the generic projection of a vault that has been running daily since
+2026-08-18. Everything here is in use somewhere, and the parts that were tried
+and removed are listed as removed rather than quietly dropped — see
+[`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ## How it works
 
-- **`_brain/` is the memory core**, split into five kinds of memory with no overlap:
-  `IDENTITY.md` (how the assistant behaves), `USER.md` (who you are), `MEMORY.md` (durable
-  facts, one line each, pointers to detail), `playbooks/` (procedural "how we do X" recipes),
-  and `logs/` (append-only session logs).
-- **Three context tiers**: Tier 0 (`CLAUDE.md` + the `_brain/` core files + the tail of the
-  last session log) is injected automatically at session start and stays small on purpose.
-  Tier 1 (topic files, project notes) is read on demand. Tier 2 (the whole vault, git history)
-  is reached by search only when Tiers 0–1 don't answer. Nothing is bulk-loaded.
-- **A hook loop does the git work for you**: `SessionStart` pulls and injects Tier 0;
-  every turn ends with a checkpoint commit (`Stop`); `SessionEnd` does a final best-effort
-  flush; `PreCompact` snapshots state before context compaction. A secret scanner and a
-  size-budget guard run inside every checkpoint. Everything fails open — a failed pull or push
-  never blocks your session.
+- **`core/` is the always-loaded tier**, and it is deliberately tiny:
+  `IDENTITY.md` (how the assistant behaves), `USER.md` (who you are, 2000-char
+  budget), `MEMORY.md` (durable facts, one line each, 4000-char budget, pointers
+  instead of detail), `OPEN_QUESTIONS.md` (what the vault is listening for).
+- **One folder per lifecycle, not per category.** `notes/` is flat and holds
+  every durable page; what a note *is* lives in its `type:` frontmatter, and how
+  mature it is lives in `status:`. A note never moves because it grew up, so a
+  link never breaks. The only move is into `archive/`, when it closes.
+- **Two inlets, both ending in distillation.** Something said in conversation
+  gets written as a note there and then — there is no capture inbox to triage
+  later. Something you *read* goes into `raw/` and is pulled in with `/ingest`,
+  which discusses it with you first, then writes the distilled note, reconciles
+  it against what the vault already believes, and catalogs it.
+- **Three retrieval tiers.** Tier 0 (`CLAUDE.md` + `core/` + the tail of the
+  last session log) is injected at session start. Tier 1 (`INDEX.md`, then the
+  two or three pages it points at) is read on demand. Tier 2 (the whole vault,
+  git history) is reached by search only when the first two don't answer.
+  Nothing is bulk-loaded.
+- **A hook loop does the git work for you**: `SessionStart` pulls and injects
+  Tier 0; every turn ends with a checkpoint commit (`Stop`); `SessionEnd`
+  flushes the session into a log; `PreCompact` snapshots state before context
+  compaction. A secret scanner and a budget guard run inside every checkpoint.
+  Everything fails open — a failed pull or push never blocks your session.
+- **The rules that matter are compiled into checks**, not left as prose the
+  model may skip: wikilink form, note frontmatter, catalog coverage, and an
+  uncaptured correction all fire from `.claude/hooks/checks.mjs` at checkpoint
+  time. This is the system's own hardest-won lesson — a written procedure loses
+  to the in-the-moment default while the work still looks finished.
 
 Full design rationale: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## What's inside
 
 ```
-_brain/           the memory core: IDENTITY.md, USER.md, MEMORY.md, OPEN_QUESTIONS.md, memory/,
-                  playbooks/, templates/, logs/ — plus .vault-active, the marker that
-                  switches the hooks on (setup creates it; this template ships without it)
-projects/         one note per active project — goal, status, decisions
-knowledge/        atomic, wikilinked permanent notes (PKM layer)
-daily/            daily notes, YYYY-MM-DD.md
-inbox/            quick capture, triaged later
-archive/          closed projects and stale notes — never deleted, always moved here
-scripts/          optional automation roster (backup verify, link sweep, off-site bundle,
-                  scheduled triage/curator, daily resurfacing) — see scripts/README.md
-.claude/          hooks (session-start, checkpoint, session-end) + skills (curator, triage,
-                  plus vendored obsidian-markdown)
-SETUP.md          agent-run installation runbook — see Quickstart
-install.mjs       one-time interactive setup for your personalized clone (manual path)
-docs/             architecture guide
+core/         Tier 0, always loaded: IDENTITY, USER, MEMORY, OPEN_QUESTIONS
+notes/        the memory store — flat, wikilinked, told apart by type:
+raw/          immutable sources you put there; the agent reads, never writes
+logs/         append-only session logs + logs/signals/, the event ledger
+archive/      closed and superseded content — never deleted, always moved here
+scripts/      link sweep, flywheel metrics, proposals sweep, retrieval eval
+.claude/      hooks, skills, note templates, the retrieval golden set
+INDEX.md      the page catalog — read this first when answering a question
+PROPOSALS.md  the one approval surface: agents append, you tick or strike
+CLAUDE.md     the constitution — the rules both you and the agent work under
+SETUP.md      agent-run installation runbook
+install.mjs   one-time interactive personalization (manual path)
+docs/         architecture guide and the decision index
 ```
 
-Everything here is plain Markdown, JSON, and Node — no build step, no runtime dependency
-beyond Node itself.
+Plain Markdown, JSON and Node — no build step, no runtime dependency beyond
+Node itself. Verified on Windows and macOS; nothing in the live tree is
+platform-bound.
 
 ## Quickstart
 
-**Requirements:** git, Node.js 18+, [Claude Code](https://claude.com/product/claude-code), a
-GitHub account. Obsidian is optional but recommended — the vault is just Markdown either way.
+**Requirements:** git, Node.js 18+, [Claude Code](https://claude.com/product/claude-code),
+a GitHub account. Obsidian is optional but recommended — the vault is plain
+Markdown either way.
 
-1. Open Claude Code and paste this in, swapping the link for this repo's own `SETUP.md` URL
-   (take the URL you're reading this on and add `/blob/main/SETUP.md`):
+Open Claude Code and paste this in, with this repo's own `SETUP.md` URL:
 
-   > Read SETUP.md from this repository and set up my second brain:
-   > `<this repo's URL>/blob/main/SETUP.md`
+> Read SETUP.md from this repository and set up my second brain:
+> `<this repo's URL>/blob/main/SETUP.md`
 
-Claude handles the rest: creates your private repo, interviews you — including asking whether
-the brain should follow you into every project (global mode, recommended) or stay
-project-scoped — personalizes the brain, and verifies it works.
+Claude handles the rest: creates your private repo, interviews you — including
+whether the brain should follow you into every project (global mode,
+recommended) or stay project-scoped — personalizes the core files, and verifies
+the hooks fire.
 
-### Manual setup (without Claude doing it)
+### Manual setup
 
-1. Click **Use this template** above and create your own repository — **choose Private.** This
-   will be your actual brain; it should never be public.
-2. Clone it to your machine.
-3. Run the interactive setup:
-   ```
-   node install.mjs
-   ```
-   It asks a few questions (name, role, timezone, preferred language, communication style),
-   seeds `_brain/USER.md` and `_brain/IDENTITY.md`, and enables `git rerere` for smoother
-   conflict handling.
-4. Open the folder as a vault in Obsidian (optional, but this is meant to be read/edited as
-   one).
-5. In a terminal, `cd` into the folder and run `claude`.
-6. Say hello. Claude Code loads `CLAUDE.md` and the `_brain/` core automatically — it already
-   knows who you are.
+1. Click **Use this template** above and create your own repository —
+   **choose Private.** This will be your actual brain; it should never be public.
+2. Clone it.
+3. Run `node install.mjs`. It interviews you, writes `core/USER.md`, fills the
+   language line in `core/IDENTITY.md`, creates `core/.vault-active`, enables
+   `git rerere`, and prints the global-mode block for you to paste. It does not
+   touch your user-level settings itself.
+4. Open the folder as an Obsidian vault (optional).
+5. `cd` in, run `claude`, say hello. `CLAUDE.md` and `core/` load automatically.
 
 ## Daily use
 
-Just work. Talk to Claude Code inside the vault the way you would about anything else — ask it
-to research something, plan a project, write a note, remember a decision. It reads and writes
-the same Markdown files you see in Obsidian, and checkpoints its own work as commits every
-turn.
+Work normally. Talk to Claude Code inside the vault about anything — plan a
+project, think a problem through, ask what you decided last month. It reads and
+writes the same Markdown you see in Obsidian and checkpoints its own work as
+commits.
 
-Quick, half-formed thoughts go into `inbox/` as they come. Later, run `/triage` to file them
-properly, and run `/curator` periodically (or on a schedule) to consolidate memory, resolve
-stale facts, and keep core files inside their size budgets.
+The commands worth knowing:
+
+| | |
+|---|---|
+| `/ingest <file>` | read a source in `raw/` into the wiki — discuss, distill, reconcile, catalog |
+| `/file` | keep an analysis produced in conversation as a proper page, instead of losing it to the transcript |
+| `/lesson` | capture a correction you just made, verbatim, before it is rationalized away |
+| `/recall` | four-layer lexical retrieval, and it logs the misses so search failure becomes data |
+| `/curator` | consolidate memory, resolve stale facts, keep the core files inside budget |
+| `/flywheel` | turn corroborated lessons into enforced checks, or retire them |
+| `/audit` | monthly structural report — budgets, orphans, overdue reviews, tag sprawl. Reports only, never fixes |
 
 ## Global mode (recommended)
 
-This is the intended way to run the system: the brain grows from *every* session you have with
-Claude Code, not just sessions inside the vault folder. If you install with the agent-first
-path above, the installer offers this during the Step 1 interview and wires it for you after
-showing you exactly what it's about to write. The manual instructions below are for people who
-installed by hand (the `install.mjs` path) and want to switch to global mode afterward.
+This is the intended way to run the system: the brain grows from *every*
+session you have with Claude Code, not just the ones inside the vault folder.
 
-By default the hooks only fire inside the vault, because they're wired in this repo's
-`.claude/settings.json` (project scope). Global mode makes the brain follow you into *every*
-project on the machine: move the `hooks` block out of the vault's `.claude/settings.json` and
-into `~/.claude/settings.json` instead, changing each command from
-`${CLAUDE_PROJECT_DIR}/.claude/hooks/...` to an absolute path to your vault's scripts, e.g.
-`node "<path-to-your-brain>/.claude/hooks/session-start.mjs"`. The scripts resolve the brain
-root themselves (script location, or `BRAIN_DIR` if set), so once wired this way any session
-anywhere on the machine will load the brain at start and checkpoint into it at Stop —
-`SessionStart` context gains a `Current project: <path>` line and a short standing-rules note
-whenever you're outside the vault. Leave the vault's own project-level `hooks` block empty when
-you do this, to avoid double-firing inside the vault. Trade-off: every session on the machine,
-in every project, now pays a small brain pull at start and a brain commit at each Stop. There's
-also a rare, harmless concurrency edge case: if two sessions on the machine start at the exact
-same moment, one pull can fail — this fails open and recovers on the next run, so it's never
-destructive, just a missed sync that one session.
+By default the hooks are wired in this repo's `.claude/settings.json`, so they
+only fire here. To go global, move that `hooks` block into your user-level
+`~/.claude/settings.json`, changing each `${CLAUDE_PROJECT_DIR}/...` command to
+an absolute path to your vault. The scripts resolve the brain root themselves
+(their own location, or `BRAIN_DIR` if you set it), so they are correct from any
+working directory. Leave this repo's own `hooks` block empty when you do, or
+they fire twice.
+
+**Wire all five hooks.** `SessionStart`, `Stop`, `PreCompact` and `SessionEnd`
+are the obvious ones; the fifth is a `PostToolUse` hook on `Read|Grep|Glob` that
+feeds the note-reuse metric. Skip it and that metric reads zero forever, which
+looks like a vault nobody uses rather than a hook nobody wired.
+
+Trade-off, plainly: every session on the machine then pays a small pull at start
+and a commit at each Stop.
 
 ## Safety
 
-- **Your clone must be private.** This template is public and contains no personal data; your
-  personalized clone will contain your actual notes and should never be.
-- Every checkpoint commit runs a built-in secret scanner over staged files (API keys, private
-  key blocks, tokens, password literals). Anything that matches is left uncommitted and logged
-  — it never gets pushed.
-- **Nothing is ever deleted automatically.** Stale or closed content is moved to `archive/`,
-  never removed. The curator can propose deletions for your approval in three narrow cases
-  (see the lifecycle policy) — it never executes them itself. `git revert` covers everything else.
-- For an extra layer, install [pre-commit](https://pre-commit.com) and run `pre-commit install`
-  — this repo ships a `.pre-commit-config.yaml` that wires up
-  [gitleaks](https://github.com/gitleaks/gitleaks) as an independent, human-side secret check.
+- **Your clone must be private.** This template is public and holds no personal
+  data; your vault will hold your actual notes and should never be public.
+- Every checkpoint commit runs a secret scanner over staged files (API keys,
+  private key blocks, tokens, password literals). Anything matching is left
+  uncommitted and logged — it never gets pushed.
+- **Nothing is deleted automatically.** Stale or closed content moves to
+  `archive/`. The curator can *propose* a deletion in two narrow cases; it never
+  executes one. `git revert` covers everything else.
+- Hooks are inert until `core/.vault-active` exists, so a fresh clone can never
+  auto-commit or auto-push over your head.
+- For an independent check, install [pre-commit](https://pre-commit.com) and run
+  `pre-commit install` — this repo ships a `.pre-commit-config.yaml` wiring
+  [gitleaks](https://github.com/gitleaks/gitleaks) on the human side.
 
 ## FAQ
 
-**Why not a vector database?** Grep, wikilinks, and a curated `MEMORY.md` index cover
-retrieval for a single-person vault without adding infrastructure, an embedding pipeline, or
-another moving part to keep in sync. Nothing here stops you from layering search on top later
-— it just isn't required to get value on day one.
+**Why not a vector database?** Grep, wikilinks, `INDEX.md` and a curated
+`MEMORY.md` cover retrieval for a single-person vault without an embedding
+pipeline to keep in sync. This isn't an assumption: the reference instance
+measured it with 52 golden queries and found zero paraphrase-misses — every
+failure was a vocabulary mismatch, which an `aliases:` entry fixes. The trigger
+to revisit is written down (`docs/DECISIONS.md`, 0010/0018) and has not fired.
 
-**Can I use it without Obsidian?** Yes. The vault is plain Markdown and YAML frontmatter; any
-editor works. Obsidian adds backlinks and graph view, but it's not load-bearing.
+**Can I use it without Obsidian?** Yes. Plain Markdown and YAML frontmatter; any
+editor works. Obsidian adds backlinks and graph view but isn't load-bearing.
 
-**What if I work offline?** Everything works locally. `SessionStart` tries to pull and
-`Stop`/`SessionEnd` try to push, but both fail open — a failed pull means you work from local
-state with a visible warning; a failed push just means the commit stays local until the next
-successful push.
+**What if I work offline?** Everything works locally. The pull at start and the
+push at Stop both fail open — a failed push just means the commit stays local
+until the next successful one.
 
-**How do I undo something the agent wrote?** `git log` to find the commit, `git revert` it.
-Git is the only database here on purpose — recovery and undo are free.
+**How do I undo something the agent wrote?** `git log`, then `git revert`. Git
+is the only database here precisely so undo is free.
 
-**Do I need a scheduled job for anything?** No, everything can be run manually (`/curator`,
-`/triage`). A weekly `/curator` schedule is a nice-to-have, not a requirement. `scripts/` ships
-an optional Windows Task Scheduler roster (backup verification, link sweeps, off-site bundles,
-scheduled `/triage`+`/curator`, daily resurfacing) for anyone who wants the deterministic parts
-running unattended — see `scripts/README.md`. Nothing registers itself; you opt in by hand.
+**Does anything run on a schedule?** No, and that's deliberate. Unattended
+maintenance was built, run, and retired: a pass that runs with nobody watching
+produces work nobody reads. The trigger is you opening a session — session start
+prints one line when something is actually due.
 
-**Why doesn't anything happen when I run Claude Code in a fresh clone?** By design. The hooks
-check for `_brain/.vault-active` and no-op without it — no pull, no commit, no push, no context
-injection. Setup creates that file, and this template deliberately ships without one, so a clone
-you haven't personalized yet (or the template repo itself, if you're contributing to it) can
-never auto-commit and auto-push over your head. Create the file and the hooks come alive.
-
-**What happens if a memory file gets too big?** `MEMORY.md` and `USER.md` have explicit line
-budgets. Going over budget never silently truncates — the checkpoint hook warns loudly and
+**What happens if a memory file gets too big?** `MEMORY.md` and `USER.md` have
+character budgets. Going over never silently truncates — the session-start
+header shows usage before you write, and the checkpoint hook warns loudly and
 asks you to run `/curator` to consolidate.
+
+**Isn't `raw/` just the inbox you removed?** No, and the difference is the test
+for any folder like it: an inbox is a queue whose healthy state is *empty* and
+whose producer was cancelled; `raw/` is a corpus whose healthy state is *full*
+and whose producer is you, saving what you read. The failure mode is real, so it
+is named with a kill criterion: files sitting un-ingested for three weeks mean
+the inlet isn't wanted, and it gets removed rather than nagged about.
 
 ## Learn more
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full design: principles, the memory model,
-  the hook loop, sync strategy, and the reasoning behind each decision.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the full design: principles,
+  the memory model, the hook loop, retrieval, and the reasoning behind each.
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — the decision index, including what
+  was reversed and why.
+
+## License
+
+MIT. See [`LICENSE`](LICENSE). The vendored `obsidian-markdown` skill keeps its
+own license — see `.claude/skills/THIRD_PARTY_LICENSES.md`.

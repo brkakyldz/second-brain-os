@@ -6,12 +6,12 @@
 // archive/, which are never treated as link sources) for:
 //   1. Broken [[wikilinks]] — target not found by filename or alias.
 //   2. Orphan notes — no inbound AND no outbound resolved wikilinks, further
-//      excluding _brain/logs/, daily/, archive/, inbox/ from being reported
+//      excluding logs/, archive/ and raw/ from being reported
 //      (they're episodic/log content, not part of the linked graph).
-//   3. Dangling pointer lines in _brain/MEMORY.md (a "-> [[...]]" pointer
+//   3. Dangling pointer lines in core/MEMORY.md (a "-> [[...]]" pointer
 //      whose target does not exist).
 //
-// Writes a report to _brain/logs/YYYY-MM-DD_link-sweep.md.
+// Writes a report to logs/YYYY-MM-DD_link-sweep.md.
 //
 // Kill criterion (per the Phase B plan): orphan count flat for a month.
 
@@ -22,13 +22,34 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 
-// Directories never walked as link sources at all.
-const EXCLUDE_FROM_SCAN = new Set(['.git', '.claude', '.obsidian', 'archive']);
+// Directories not walked at all — not link sources, not link targets.
+const EXCLUDE_FROM_SCAN = new Set(['.git', '.claude', '.obsidian']);
+
+// Walked and indexed as link *targets*, but never scanned as link *sources*.
+// `archive/` used to sit in EXCLUDE_FROM_SCAN, which conflated the two: an
+// archived note stopped being a resolvable destination, so every link into it
+// was reported broken. That is precisely the promise CLAUDE.md makes and this
+// sweep exists to verify — "a link never breaks because a thought grew up" —
+// and it made B2's report almost entirely false positives (54 of 54 on
+// 2026-08-27). Archived notes are still not scanned for broken links of their
+// own: they are a record of what was believed then, not a live surface.
+// `raw/` joins archive/ for the same reason from the other direction: a
+// clipped article is a legitimate link *destination* (its note points back at
+// it) but it is not vault prose, so scanning it for broken links would report
+// on text the vault never wrote and must never edit (ADR 0035).
+const TARGET_ONLY_DIRS = new Set(['archive', 'raw']);
 
 // Additional directories excluded only from *orphan reporting* (still
 // scanned and still part of the link graph — other notes may legitimately
 // link into/out of them).
-const EXCLUDE_FROM_ORPHAN_REPORT = ['_brain/logs', 'daily', 'inbox'];
+// `core/` is here because its files are Tier 0 — loaded into every session
+// whether or not anything links to them. An always-loaded file reported as an
+// unreachable one is a false positive by definition, and this report dies from
+// false positives long before it dies from missed orphans.
+// `docs/` and the root repo docs are documentation *about* the vault rather
+// than pages in it; they are read from the repo, not reached by wikilink.
+const EXCLUDE_FROM_ORPHAN_REPORT = ['logs', 'archive', 'raw', 'core', 'docs', 'scripts'];
+const ROOT_DOCS_EXCLUDED = new Set(['README.md', 'SETUP.md', 'CLAUDE.md']);
 
 function toPosix(p) {
   return p.split(path.sep).join('/');
@@ -138,7 +159,14 @@ for (const full of allFiles) {
   }
   const { frontmatter } = parseFrontmatter(content);
   const linkTargets = extractLinkTargets(content);
-  notes.push({ relPath, frontmatter, linkTargets });
+  // Target-only files are indexed below but contribute no links of their own.
+  const topDir = relPath.split('/')[0];
+  notes.push({
+    relPath,
+    frontmatter,
+    linkTargets: TARGET_ONLY_DIRS.has(topDir) ? [] : linkTargets,
+    targetOnly: TARGET_ONLY_DIRS.has(topDir),
+  });
 
   const noExt = relPath.replace(/\.md$/i, '');
   byRelPathNoExt.set(noExt.toLowerCase(), relPath);
@@ -205,6 +233,7 @@ for (const note of notes) {
 }
 
 function isExcludedFromOrphanReport(relPath) {
+  if (ROOT_DOCS_EXCLUDED.has(relPath)) return true;
   return EXCLUDE_FROM_ORPHAN_REPORT.some(
     (prefix) => relPath === prefix || relPath.startsWith(prefix + '/')
   );
@@ -218,9 +247,9 @@ for (const note of notes) {
   if (outCount === 0 && inCount === 0) orphans.push(note.relPath);
 }
 
-// --- 3. Dangling pointers in _brain/MEMORY.md --------------------------------
+// --- 3. Dangling pointers in core/MEMORY.md --------------------------------
 
-const memoryPath = path.join(REPO_ROOT, '_brain', 'MEMORY.md');
+const memoryPath = path.join(REPO_ROOT, 'core', 'MEMORY.md');
 const danglingPointers = [];
 if (existsSync(memoryPath)) {
   const memContent = readFileSync(memoryPath, 'utf8');
@@ -278,7 +307,7 @@ lines.push('');
 lines.push('## Orphan notes');
 lines.push('');
 lines.push(
-  '(no inbound and no outbound resolved wikilinks; excludes `_brain/logs/`, `daily/`, `archive/`, `inbox/`)'
+  '(no inbound and no outbound resolved wikilinks; excludes `logs/`, `archive/`, `raw/`, `core/`, `docs/`, `scripts/` and the repo docs)'
 );
 lines.push('');
 if (orphans.length === 0) {
@@ -301,7 +330,7 @@ if (danglingPointers.length === 0) {
 }
 lines.push('');
 
-const logDir = path.join(REPO_ROOT, '_brain', 'logs');
+const logDir = path.join(REPO_ROOT, 'logs');
 if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
 const reportPath = path.join(logDir, `${today}_link-sweep.md`);
 writeFileSync(reportPath, lines.join('\n'), 'utf8');
@@ -310,3 +339,14 @@ console.log(
   `link-sweep: scanned ${notes.length} file(s); ${brokenLinks.length} broken link(s), ${orphans.length} orphan(s), ${danglingPointers.length} dangling MEMORY.md pointer(s).`
 );
 console.log(`link-sweep: report written to ${toPosix(path.relative(REPO_ROOT, reportPath))}`);
+
+// Tell the session-start due check this sweep happened (ADR 0033). The dated
+// report above is the fallback source, so a failure here costs nothing but a
+// day of resolution in the "Nd ago" figure.
+try {
+  const { stampMaintenance } = await import('../.claude/hooks/lib.mjs');
+  stampMaintenance(REPO_ROOT, 'link-sweep', 'LinkSweep');
+} catch {
+  // never fail a sweep over its own bookkeeping
+}
+

@@ -1,321 +1,219 @@
 #!/usr/bin/env node
-// Interactive setup for a personalized Second Brain OS clone.
-// Node >= 18, no dependencies. Safe to re-run (idempotent): re-prompts and
-// overwrites only the USER.md sections and IDENTITY.md line this script owns.
+// Second Brain OS — one-time personalization for a fresh clone.
+//
+// What it does, and nothing more:
+//   1. asks a short interview,
+//   2. writes core/USER.md and the language line in core/IDENTITY.md,
+//   3. creates core/.vault-active — the marker every hook is gated on,
+//   4. turns on git rerere,
+//   5. prints the global-mode block for you to paste, and does NOT write it.
+//
+// Step 5 is deliberate: user-level settings are outside this repo, they affect
+// every project on the machine, and an installer that edits them without you
+// watching is exactly the kind of thing this system's rules forbid.
+//
+// Safe to abort at any prompt (Ctrl-C) — nothing is written until the summary
+// is confirmed.
 
-import { createInterface } from 'node:readline/promises';
-import { stdin, stdout, exit } from 'node:process';
-import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
+import readline from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const CWD = process.cwd();
-const USER_MD = path.join(CWD, '_brain', 'USER.md');
-const IDENTITY_MD = path.join(CWD, '_brain', 'IDENTITY.md');
-const VAULT_MARKER = path.join(CWD, '_brain', '.vault-active');
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const CORE = path.join(ROOT, 'core');
+const MARKER = path.join(CORE, '.vault-active');
 
-function banner() {
-  console.log('');
-  console.log('  Second Brain OS — setup');
-  console.log('  ------------------------');
-  console.log('  Personalizes this clone: fills in _brain/USER.md (and');
-  console.log('  _brain/IDENTITY.md if you pick a non-English language),');
-  console.log('  enables git rerere, and makes one setup commit.');
-  console.log('');
-}
+const rl = readline.createInterface({ input: stdin, output: stdout });
 
-function isGitClone() {
-  try {
-    const out = execFileSync('git', ['rev-parse', '--is-inside-work-tree'], {
-      cwd: CWD,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
-    return out === 'true';
-  } catch {
-    return false;
-  }
-}
-
-async function prompt(rl, question, defaultValue) {
-  const suffix = defaultValue ? ` [${defaultValue}]` : '';
-  const answer = (await rl.question(`${question}${suffix}: `)).trim();
-  return answer === '' ? (defaultValue || '') : answer;
-}
-
-// Node's readline/promises has a documented quirk with piped (non-TTY)
-// stdin: when several lines are already buffered, only the line consumed by
-// the FIRST `rl.question()` call is captured — later `'line'` events fire
-// before the next question's listener attaches and are silently dropped.
-// So for non-interactive stdin (tests, scripted runs) we read all of stdin
-// eagerly up front and consume it line-by-line instead of calling
-// `rl.question()` repeatedly. Interactive TTY sessions still use
-// `rl.question()` as normal.
-async function collectAnswers() {
-  const questions = [
-    ['Your name', undefined],
-    ['Your role (one line)', undefined],
-    ['Location / timezone (e.g. "UTC" or "City, Country (GMT+X)")', undefined],
-    ['Preferred conversation language', 'English'],
-    ['Communication style (one line)', 'concise'],
-  ];
-
-  let values;
-  if (stdin.isTTY) {
-    const rl = createInterface({ input: stdin, output: stdout });
-    try {
-      values = [];
-      for (const [question, defaultValue] of questions) {
-        values.push(await prompt(rl, question, defaultValue));
-      }
-    } finally {
-      rl.close();
-    }
-  } else {
-    let raw = '';
-    try {
-      raw = readFileSync(0, 'utf8');
-    } catch {
-      raw = '';
-    }
-    const lines = raw.split(/\r?\n/);
-    let idx = 0;
-    values = questions.map(([question, defaultValue]) => {
-      const line = idx < lines.length ? lines[idx++].trim() : '';
-      const value = line === '' ? (defaultValue || '') : line;
-      const suffix = defaultValue ? ` [${defaultValue}]` : '';
-      console.log(`${question}${suffix}: ${value}`);
-      return value;
-    });
-  }
-
-  const [name, role, location, language, style] = values;
-  return { name, role, location, language, style };
-}
-
-// Replaces the body of a "## Header" section (up to the next "## " header
-// or EOF) with newBody. If the header isn't found, appends header+body.
-function replaceSection(content, header, newBody) {
-  const headerLine = `## ${header}`;
-  // The header-line group consumes ONLY the header's own line ending
-  // ([ \t]*\r?\n) — not a greedy \s*, which would also swallow the blank
-  // separator line and bleed into the next header's text before the lazy
-  // body group and its lookahead ever get a chance to run. The lookahead's
-  // end-of-input branch uses (?![\s\S]) rather than bare `$`: with the `m`
-  // flag (needed for `^` to match each header line), `$` matches before
-  // ANY `\n`, not just at the true end of the string — which made the lazy
-  // body group stop at the very first blank line instead of scanning all
-  // the way to the next real header, breaking idempotent re-runs.
-  const re = new RegExp(`(^## ${header}[ \\t]*\\r?\\n)([\\s\\S]*?)(?=\\r?\\n## |(?![\\s\\S]))`, 'm');
-  const replacement = `$1\n${newBody.trim()}\n`;
-  if (re.test(content)) {
-    return content.replace(re, replacement);
-  }
-  const sep = content.endsWith('\n') ? '' : '\n';
-  return `${content}${sep}\n${headerLine}\n\n${newBody.trim()}\n`;
-}
-
-function writeUserMd(answers) {
-  if (!existsSync(USER_MD)) {
-    console.log(`  (skip) ${USER_MD} not found — is this a Second Brain OS clone?`);
-    return false;
-  }
-  // Normalize CRLF -> LF before regex work: a Windows checkout of a
-  // `text=auto` repo may have CRLF line endings, which break the LF-only
-  // patterns below (and their `^`/`$`/`\n` boundaries). Written back as LF;
-  // git's own attributes normalize it again on commit/checkout as needed.
-  let content = readFileSync(USER_MD, 'utf8').replace(/\r\n/g, '\n');
-
-  content = replaceSection(content, 'Name', `${answers.name}. Address as "${answers.name}".`);
-  content = replaceSection(content, 'Role', answers.role);
-  content = replaceSection(content, 'Location / Timezone', answers.location);
-
-  const styleLines = [
-    `- Converses in **${answers.language}**; vault content is always written in **English**.`,
-    `- ${answers.style}`,
-  ].join('\n');
-  content = replaceSection(content, 'Communication style', styleLines);
-
-  writeFileSync(USER_MD, content, 'utf8');
-  return true;
-}
-
-// Swaps the language-example line in IDENTITY.md for a live instruction when
-// a non-English language was chosen; restores the commented example when
-// English is chosen (so re-running with a different answer stays correct).
-function writeIdentityMd(answers) {
-  if (!existsSync(IDENTITY_MD)) return false;
-  // See the CRLF note in writeUserMd() above — same normalization needed here.
-  let content = readFileSync(IDENTITY_MD, 'utf8').replace(/\r\n/g, '\n');
-
-  const markerRe = /^(<!-- e\.g\.: Converse with me in.*-->|- \*\*Converse with me in.*\*\*)$/m;
-  if (!markerRe.test(content)) return false;
-
-  const isEnglish = answers.language.trim().toLowerCase() === 'english';
-  const line = isEnglish
-    ? '<!-- e.g.: Converse with me in <language>; vault content stays in English -->'
-    : `- **Converse with me in ${answers.language}; vault content stays in English, always.**`;
-
-  content = content.replace(markerRe, line);
-  writeFileSync(IDENTITY_MD, content, 'utf8');
-  return true;
-}
-
-function run(cmd, args, opts = {}) {
-  return execFileSync(cmd, args, {
-    cwd: CWD,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    ...opts,
-  });
-}
-
-// The hooks refuse to touch a directory that has no activation marker, so
-// this is the step that turns a clone into a live vault. Written last-ish,
-// and never rewritten on a re-run — the file's date is a real record.
-function writeVaultMarker() {
-  if (existsSync(VAULT_MARKER)) return false;
-  const body = [
-    'This file marks this directory as a live Second Brain vault.',
-    '',
-    'The hooks in .claude/hooks/ do nothing without it: no pull, no',
-    'checkpoint commit, no push, no Tier-0 context injection. That is what',
-    'keeps the public template repo — and a clone that has not been set up',
-    'yet — from committing and pushing itself.',
-    '',
-    'Commit it. It belongs to your vault, never to the template.',
-    '',
-    `Activated: ${new Date().toISOString().slice(0, 10)}`,
-    '',
-  ].join('\n');
-  writeFileSync(VAULT_MARKER, body, 'utf8');
-  return true;
-}
-
-function enableRerere() {
-  try {
-    run('git', ['config', 'rerere.enabled', 'true']);
-    console.log('  git rerere enabled.');
-  } catch (err) {
-    console.log('  (warn) could not enable git rerere:', err.message.split('\n')[0]);
-  }
-}
-
-function getOrigin() {
-  try {
-    return run('git', ['remote', 'get-url', 'origin']).trim();
-  } catch {
-    return null;
-  }
-}
-
-// Best-effort: warn loudly if `gh` reports the origin repo as public. Skips
-// silently if `gh` isn't installed, isn't authenticated, or errors out.
-function warnIfPublic() {
-  try {
-    const visibility = run('gh', ['repo', 'view', '--json', 'visibility', '-q', '.visibility']).trim();
-    if (visibility.toUpperCase() === 'PUBLIC') {
-      console.log('');
-      console.log('  ################################################################');
-      console.log('  # WARNING: this repo\'s GitHub origin is PUBLIC.               #');
-      console.log('  # Your personal brain should never be public. Make it private #');
-      console.log('  # now: gh repo edit --visibility private                      #');
-      console.log('  ################################################################');
-      console.log('');
-    }
-  } catch {
-    // gh absent, unauthenticated, or no such repo — skip silently.
-  }
-}
-
-function commitAndPush(origin) {
-  try {
-    run('git', ['add', '-A']);
-  } catch (err) {
-    console.log('  (warn) git add failed:', err.message.split('\n')[0]);
-    return;
-  }
-
-  let hasStaged = true;
-  try {
-    run('git', ['diff', '--cached', '--quiet']);
-    hasStaged = false;
-  } catch (err) {
-    if (typeof err.status !== 'number' || err.status !== 1) {
-      console.log('  (warn) git diff check failed:', err.message.split('\n')[0]);
-      return;
-    }
-  }
-
-  if (!hasStaged) {
-    console.log('  Nothing changed — skipping commit.');
-    return;
-  }
-
-  try {
-    run('git', ['commit', '-m', 'setup: personalize brain']);
-    console.log('  Committed: setup: personalize brain');
-  } catch (err) {
-    console.log('  (warn) git commit failed:', err.message.split('\n')[0]);
-    return;
-  }
-
-  if (origin) {
-    try {
-      run('git', ['push']);
-      console.log('  Pushed to origin.');
-    } catch (err) {
-      console.log('  (warn) push failed (commit is safe locally):', err.message.split('\n')[0]);
-    }
-  }
-}
-
-function nextSteps() {
-  console.log('');
-  console.log('  Done. Next steps:');
-  console.log('    1. Open this folder as a vault in Obsidian (optional).');
-  console.log('    2. In this folder, run: claude');
-  console.log('    3. Say hello — Claude Code already knows who you are.');
-  console.log('');
-  console.log('  Re-run `node install.mjs` any time to update your answers.');
-  console.log('');
-}
-
-async function main() {
-  banner();
-
-  if (!isGitClone()) {
-    console.log('  This does not look like a git clone.');
-    console.log('  Use this template on GitHub (choose Private), clone it, then run');
-    console.log('  `node install.mjs` again from inside the clone.');
-    console.log('');
-    exit(0);
-    return;
-  }
-
-  const answers = await collectAnswers();
-
-  const wroteUser = writeUserMd(answers);
-  if (wroteUser) console.log(`  Updated ${path.relative(CWD, USER_MD)}`);
-
-  const wroteIdentity = writeIdentityMd(answers);
-  if (wroteIdentity) console.log(`  Updated ${path.relative(CWD, IDENTITY_MD)}`);
-
-  if (writeVaultMarker()) {
-    console.log(`  Created ${path.relative(CWD, VAULT_MARKER)} — hooks are now live.`);
-  }
-
-  enableRerere();
-
-  const origin = getOrigin();
-  if (origin) warnIfPublic();
-
-  commitAndPush(origin);
-  nextSteps();
-  exit(0);
-}
-
-main().catch((err) => {
-  console.error('  install.mjs failed:', err && err.stack ? err.stack : String(err));
-  exit(1);
+// Lines are queued rather than awaited one at a time. With a real terminal the
+// two are identical, but with piped input readline delivers a whole buffered
+// chunk at once and every line after the first is dropped on the floor — which
+// makes the installer impossible to smoke-test and silently truncates anyone's
+// scripted run. Queue first, hand out one line per question.
+const pending = [];
+const waiting = [];
+let closed = false;
+rl.on('line', (line) => {
+  const next = waiting.shift();
+  if (next) next(line);
+  else pending.push(line);
 });
+rl.on('close', () => {
+  closed = true;
+  while (waiting.length) waiting.shift()(null);
+});
+
+function nextLine() {
+  if (pending.length) return Promise.resolve(pending.shift());
+  if (closed) return Promise.resolve(null);
+  return new Promise((resolve) => waiting.push(resolve));
+}
+
+const ask = async (q, fallback = '') => {
+  stdout.write(q);
+  const line = await nextLine();
+  if (line === null) return fallback; // input ended — take the default
+  const a = line.trim();
+  return a === '' ? fallback : a;
+};
+
+function bail(msg) {
+  stdout.write(`\n${msg}\n`);
+  rl.close();
+  process.exit(1);
+}
+
+if (!fs.existsSync(CORE)) {
+  bail('No core/ directory here. Run this from the root of your brain clone.');
+}
+
+if (fs.existsSync(MARKER)) {
+  const again = await ask(
+    'core/.vault-active already exists — this vault looks personalized.\n' +
+      'Re-run setup and overwrite core/USER.md? [y/N] ',
+    'n',
+  );
+  if (!/^y(es)?$/i.test(again)) bail('Nothing changed.');
+}
+
+stdout.write(`
+Second Brain OS — setup
+-----------------------
+Answer what you can. Leave anything blank rather than guessing: a blank line
+is honest, an invented one is read as true by every future session.
+
+`);
+
+const name = await ask('Your name (what should the assistant call you?): ');
+const role = await ask('Your role, one line: ');
+const where = await ask('Location / timezone: ');
+const lang = await ask('Language you want to be talked to in [English]: ', 'English');
+const style = await ask('Communication style, one line [concise, explain properly]: ',
+  'concise, but explain properly — a summary that needs a follow-up failed');
+const background = await ask('Technical background, one line: ');
+const focusRaw = await ask('Current focus — active projects, comma-separated: ');
+const focus = focusRaw.split(',').map((s) => s.trim()).filter(Boolean);
+
+const today = new Date().toISOString().slice(0, 10);
+
+const userMd = `# User
+
+## Name
+${name || '<!-- unanswered -->'}${name ? `. Address as "${name}".` : ''}
+
+## Role
+${role || '<!-- unanswered -->'}
+
+## Location / Timezone
+${where || '<!-- unanswered -->'}
+
+## Communication style
+- Converses in **${lang}**; durable vault content is written in English —
+  rationale in \`IDENTITY.md\`.
+- ${style}
+
+## Technical background
+- ${background || '<!-- unanswered -->'}
+
+## Current focus
+${focus.length
+    ? focus.map((f) => `- **${f}** — <!-- one line on where it stands --> → [[${slug(f)}]]`).join('\n')
+    : '<!-- unanswered -->'}
+
+<!-- Filled ${today} by install.mjs from a setup interview.
+     Correct it rather than growing it: when a line here turns out to be wrong,
+     the fix is an edit plus a dated comment, not a second line saying otherwise.
+     Budget: 2000 characters, HTML comments excluded. -->
+`;
+
+function slug(s) {
+  return s
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
+
+stdout.write(`
+About to write:
+
+  core/USER.md          (${userMd.length} chars)
+  core/IDENTITY.md      (language line only)
+  core/.vault-active    (switches the hooks on)
+  git config rerere.enabled true
+
+`);
+
+const go = await ask('Write these? [Y/n] ', 'y');
+if (!/^y(es)?$/i.test(go)) bail('Nothing changed.');
+
+fs.writeFileSync(path.join(CORE, 'USER.md'), userMd, 'utf8');
+
+// IDENTITY.md keeps its own wording; only the placeholder is filled.
+const idPath = path.join(CORE, 'IDENTITY.md');
+if (fs.existsSync(idPath)) {
+  const id = fs.readFileSync(idPath, 'utf8');
+  const filled = id.replace('<LANGUAGE>', lang);
+  if (filled !== id) fs.writeFileSync(idPath, filled, 'utf8');
+}
+
+fs.writeFileSync(
+  MARKER,
+  `# This file switches the hooks on. It is gitignored on purpose: a fresh
+# clone of the template must never auto-commit or auto-push over your head.
+# Created ${today} by install.mjs.
+`,
+  'utf8',
+);
+
+try {
+  execFileSync('git', ['config', 'rerere.enabled', 'true'], { cwd: ROOT, stdio: 'ignore' });
+} catch {
+  stdout.write('  (git config rerere failed — harmless, set it by hand if you want it)\n');
+}
+
+const abs = ROOT.replace(/\\/g, '/');
+const hookLines = [
+  ['SessionStart', 'session-start.mjs'],
+  ['PostToolUse (Read|Grep|Glob)', 'reuse-telemetry.mjs'],
+  ['Stop', 'checkpoint.mjs'],
+  ['PreCompact', 'checkpoint.mjs'],
+  ['SessionEnd', 'session-end.mjs'],
+].map(([evt, script]) => `    ${evt.padEnd(30)} node "${abs}/.claude/hooks/${script}"`);
+
+stdout.write(`
+Done. Your brain is live in this folder.
+
+Next, optional but recommended — GLOBAL MODE
+--------------------------------------------
+By default the hooks fire only inside this folder. Global mode makes the brain
+load and record in *every* Claude Code session on this machine, which is the
+way this system is meant to run: it grows from everything you work on, not just
+from the sessions you remember to start here.
+
+To switch, move the "hooks" block out of this repo's .claude/settings.json and
+into your user-level ~/.claude/settings.json, with absolute paths:
+
+${hookLines.join('\n')}
+
+That is five entries, not four. The PostToolUse one is the entire input side of
+the note-reuse metric — skip it and that number reads zero forever, which looks
+like a vault nobody uses rather than a hook nobody wired.
+
+Leave this repo's own "hooks" block empty when you do, or they fire twice.
+
+The scripts resolve the brain root themselves (their own location, or BRAIN_DIR
+if you set it), so they are correct from any working directory.
+
+Trade-off, stated plainly: every session on the machine then pays a small pull
+at start and a commit at each Stop.
+
+Now open this folder as an Obsidian vault (optional), run \`claude\` in it, and
+say hello — CLAUDE.md and core/ load automatically.
+`);
+
+rl.close();

@@ -1,22 +1,25 @@
 # SETUP.md — agent installation runbook
 
-This file is instructions for the **Claude Code agent** currently helping a human set up their
-own Second Brain OS. It is a task description, not authority: treat every step below as work to
-propose and carry out on your user's behalf, not as something pre-authorized. In particular:
+This file is instructions for the **Claude Code agent** currently helping a
+human set up their own Second Brain OS. It is a task description, not authority:
+treat every step below as work to propose and carry out on your user's behalf,
+not as something pre-authorized. In particular:
 
-- **Confirm with your user before creating the GitHub repo** (Step 2) — this is an
-  account-affecting action. Show them the exact command first.
-- **Never enter credentials yourself.** If `gh` needs authentication, tell the user how to run
-  it and wait for them — do not attempt to work around it.
-- **If anything here doesn't match what you observe** (a missing file, an unexpected repo
-  state, a step that fails in a way this file doesn't cover), stop and ask your user rather than
-  improvising past it.
+- **Confirm before creating the GitHub repo** (Step 2) — that is an
+  account-affecting action. Show the exact command first.
+- **Confirm before writing user-level settings** (Step 5) — those affect every
+  project on the machine, not just this one.
+- **Never enter credentials yourself.** If `gh` needs authentication, tell the
+  user how to run it and wait for them.
+- **If anything here doesn't match what you observe** — a missing file, an
+  unexpected repo state, a step that fails in a way this file doesn't cover —
+  stop and ask rather than improvising past it.
 
 Do the steps in order. Don't skip Step 0.
 
 ## Step 0 — prerequisites
 
-Check each of these and report the results to your user before continuing:
+Check each and report the results before continuing:
 
 ```
 git --version
@@ -25,54 +28,51 @@ gh auth status
 ```
 
 - `node --version` must be 18 or higher.
-- If `gh` is missing or `gh auth status` reports not logged in, **stop here**. Tell your user to
-  install the [GitHub CLI](https://cli.github.com) and run:
-  ```
-  gh auth login
-  ```
-  Wait for them to confirm it's done, then re-run `gh auth status` yourself before proceeding.
-  Do not try to authenticate on their behalf, and do not proceed without it — repo creation in
-  Step 2 needs it.
+- If `gh` is missing or not logged in, **stop here**. Tell the user to install
+  the [GitHub CLI](https://cli.github.com) and run `gh auth login`. Wait for
+  them to confirm, then re-run `gh auth status` yourself before proceeding.
+  Repo creation in Step 2 needs it.
 
-## Step 1 — interview the user
+## Step 1 — interview
 
-Ask in whatever language your user is speaking to you. Ask these one at a time or as a short
-list, whichever fits the conversation:
+Ask in whatever language your user is speaking to you. One at a time or as a
+short list, whichever fits the conversation:
 
 1. What should the private brain repo be called? Suggest `my-brain`.
-2. Where on disk should it live (parent directory to clone into)?
-3. Their name.
-4. Their role (one line).
+2. Where on disk should it live (the parent directory to clone into)?
+3. Their name — what the assistant should call them.
+4. Their role, one line.
 5. Location / timezone.
-6. Preferred conversation language (the one you should talk to them in day to day).
-7. Communication style, one line (suggest "concise" as a default if they have no preference).
-8. Technical background, one line (tools/languages they use, experience level).
-9. Current focus — their active project(s). For each one they name, offer to create a matching
-   note under `projects/` for it.
-10. Brain scope — **global (recommended)** or project-only. Explain it briefly: global means the
-   brain loads and records in *every* Claude Code session on this machine, whatever the project
-   — this is the system's core premise, a brain that grows from everything you work on.
-   Project-only means the brain is only active inside the vault folder itself. Global is the
-   recommended, intended way to run this system; project-only is a narrower fallback for people
-   who don't want a machine-wide hook.
+6. The language they want to be talked to in day to day.
+7. Communication style, one line. If they have no preference, suggest "concise,
+   but explain properly" and move on — this field gets its real value later,
+   from corrections.
+8. Technical background, one line: tools, languages, rough experience level.
+9. Current focus — their active projects. Offer to create a note in `notes/`
+   for each one they name.
+10. Brain scope — **global (recommended)** or project-only. Explain it briefly:
+    global means the brain loads and records in *every* Claude Code session on
+    this machine, which is the system's core premise — a brain that grows from
+    everything they work on. Project-only means it is active inside the vault
+    folder alone.
 
-Leave any question they skip blank rather than guessing — don't invent facts about them.
+**Leave anything they skip blank rather than guessing.** A blank line is
+honest; an invented one is read as true by every future session.
 
 ## Step 2 — create the private repo
 
-First, work out `<OWNER>/<REPO>` for the template: derive it from the URL your user gave you for
-*this* repository (the one this SETUP.md lives in). Do not assume or hardcode an owner — forks
-of this template must install from themselves, not from the original.
+Work out `<OWNER>/<REPO>` for the template from the URL your user gave you for
+*this* repository. Do not assume or hardcode an owner — a fork of this template
+must install from itself, not from the original.
 
-Show your user the exact command you're about to run and get an explicit go-ahead before
-running it — this creates a repo on their GitHub account:
+Show the exact command and get an explicit go-ahead — this creates a repo on
+their GitHub account:
 
 ```
 gh repo create <repo-name> --template <OWNER>/<REPO> --private --clone
 ```
 
-Run it from the parent directory they chose in Step 1. This creates the repo as a private
-template-instance and clones it locally in one step.
+Run it from the parent directory chosen in Step 1.
 
 Then verify it actually came up private:
 
@@ -80,44 +80,44 @@ Then verify it actually came up private:
 gh repo view <repo-name> --json visibility
 ```
 
-If `visibility` is not `PRIVATE`, **stop and tell your user** — do not continue past this point
-with a public brain. They'll need to fix visibility on GitHub before you proceed.
+If `visibility` is not `PRIVATE`, **stop and tell your user.** Do not continue
+past this point with a public brain — this vault will hold their memory.
 
 ## Step 3 — personalize
 
-`install.mjs` exists as the human-run fallback for this step — since you're doing this
-interactively with the user already, edit the files directly instead of shelling out to it.
+`install.mjs` is the human-run fallback for this step. Since you are here
+interactively, edit the files directly instead of shelling out to it.
 
 In the new clone:
 
-- Open `_brain/USER.md` and fill in the `## Name`, `## Role`, `## Location / Timezone`,
-  `## Communication style`, `## Technical background`, and `## Current focus` sections from the
-  Step 1 answers. Under `## Communication style`, include both a line noting their preferred
-  conversation language (vault content itself always stays in English) and their one-line style
-  preference. Leave any section blank if the user didn't answer it — never invent a value.
-- If they named any active projects under "current focus" and agreed to notes for them, create
-  the corresponding files under `projects/`.
-- If their preferred conversation language is not English, open `_brain/IDENTITY.md` and replace
-  the commented example line:
-  ```
-  <!-- e.g.: Converse with me in <language>; vault content stays in English -->
-  ```
-  with a live instruction:
-  ```
-  - Converse with me in <language>; vault content stays in English.
-  ```
-  If they chose English, leave that line as-is.
-- **Activate the vault.** Create `_brain/.vault-active`. Until this file exists the hooks
-  deliberately do nothing — no pull, no checkpoint commit, no push, no context injection —
-  which is what stops an unpersonalized clone (or the template repo itself) from committing
-  and pushing over the user's head. Any content is fine; this explains itself to whoever
-  finds it later:
+- **`core/USER.md`** — fill `## Name`, `## Role`, `## Location / Timezone`,
+  `## Communication style`, `## Technical background`, `## Current focus` from
+  the Step 1 answers, deleting the guidance comments as you go. Under
+  communication style, note their conversation language explicitly. Keep the
+  whole file under **2000 characters** (HTML comments excluded).
+- **`core/IDENTITY.md`** — replace the `<LANGUAGE>` placeholder in § Language
+  with their answer to question 6, and delete the instruction comment above it.
+  If they converse in English, simplify that section to a single line rather
+  than leaving a split that doesn't apply to them.
+- **`notes/`** — create a note for each project they named, using
+  `.claude/templates/project.md`. Give each at least one outbound wikilink
+  before you close it, and add a row to `INDEX.md` under **Projects**. The
+  `index-coverage` check fires on a note you forget.
+- **`core/MEMORY.md`** — leave it empty. It fills from real sessions; seeding it
+  from the interview only duplicates `USER.md`.
+- **Activate the vault.** Create `core/.vault-active`. Until this file exists
+  the hooks deliberately do nothing — no pull, no checkpoint commit, no push, no
+  context injection — which is what stops an unpersonalized clone from
+  committing and pushing over your user's head. Content is free-form; this
+  explains itself to whoever finds it later:
+
   ```
   This file marks this directory as a live Second Brain vault.
-  The hooks in .claude/hooks/ do nothing without it. Commit it — it belongs
-  to your vault, never to the template.
+  The hooks in .claude/hooks/ do nothing without it.
   Activated: YYYY-MM-DD
   ```
+
+  It is gitignored on purpose: per-clone machine state, not vault content.
 
 ## Step 4 — git setup
 
@@ -130,127 +130,104 @@ git commit -m "setup: personalize brain"
 git push
 ```
 
-## Step 4.5 — global mode wiring (if chosen)
+If the machine has no git identity at all (`git config user.email` is empty),
+set it repo-locally before committing — otherwise the first checkpoint commit
+fails on identity, which looks like a vault problem and is not one.
 
-Only do this if the user chose global in Step 1. Skip straight to Step 5 if they chose
-project-only — the repo's committed default is already project-scoped, so no action is needed.
+## Step 5 — global mode wiring (if chosen)
 
-1. Work out the four hook entries you're about to add, using the **absolute path to this clone**
-   (the user's vault) in each command. Show your user the exact JSON block before writing
-   anything, and get an explicit yes:
+Only if the user chose global in Step 1. If they chose project-only, skip to
+Step 6 — the repo's committed default is already project-scoped.
+
+1. Build the hook block using the **absolute path to this clone**. Show your
+   user the exact JSON before writing anything, and get an explicit yes.
+
+   **Five entries, not four.** `SessionStart`, `Stop`, `PreCompact` and
+   `SessionEnd` are the obvious ones. The fifth is a `PostToolUse` hook on
+   `Read|Grep|Glob` running `reuse-telemetry.mjs`, and it is the entire input
+   side of the note-reuse metric — the number this system uses to decide whether
+   a feature is worth keeping. Wire only the first four and that metric reads
+   zero forever, which looks like a vault nobody uses rather than a hook nobody
+   wired.
 
    ```json
    {
      "hooks": {
        "SessionStart": [
-         {
-           "hooks": [
-             {
-               "type": "command",
-               "command": "node \"<absolute path to the user's vault>/.claude/hooks/session-start.mjs\"",
-               "timeout": 60
-             }
-           ]
-         }
+         { "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/session-start.mjs\"", "timeout": 60 } ] }
+       ],
+       "PostToolUse": [
+         { "matcher": "Read|Grep|Glob", "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/reuse-telemetry.mjs\"", "timeout": 15 } ] }
        ],
        "Stop": [
-         {
-           "hooks": [
-             {
-               "type": "command",
-               "command": "node \"<absolute path to the user's vault>/.claude/hooks/checkpoint.mjs\"",
-               "timeout": 60
-             }
-           ]
-         }
+         { "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/checkpoint.mjs\"", "timeout": 60 } ] }
        ],
        "PreCompact": [
-         {
-           "hooks": [
-             {
-               "type": "command",
-               "command": "node \"<absolute path to the user's vault>/.claude/hooks/checkpoint.mjs\"",
-               "timeout": 60
-             }
-           ]
-         }
+         { "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/checkpoint.mjs\"", "timeout": 60 } ] }
        ],
        "SessionEnd": [
-         {
-           "hooks": [
-             {
-               "type": "command",
-               "command": "node \"<absolute path to the user's vault>/.claude/hooks/session-end.mjs\"",
-               "timeout": 30
-             }
-           ]
-         }
+         { "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/session-end.mjs\"", "timeout": 30 } ] }
        ]
      }
    }
    ```
 
-2. Merge this into `~/.claude/settings.json`:
-   - Read the existing file if it exists. If it doesn't, start from `{}`.
-   - Preserve every existing key untouched — do not drop or overwrite anything already there.
-   - If a `hooks` block already exists, append these four entries to the existing
-     `SessionStart`/`Stop`/`PreCompact`/`SessionEnd` arrays rather than replacing them (a user
-     may already have other hooks configured).
-   - After writing, re-read the file and confirm it parses as valid JSON before moving on. If it
+2. Merge it into `~/.claude/settings.json`:
+   - Read the existing file; if there is none, start from `{}`.
+   - Preserve every existing key untouched.
+   - If a `hooks` block already exists, **append** to the existing arrays rather
+     than replacing them — the user may already have other hooks.
+   - After writing, re-read the file and confirm it parses as valid JSON. If it
      doesn't, stop and tell your user rather than leaving a broken settings file.
 
-3. Then remove the `hooks` block from the vault's own `.claude/settings.json` (the file at
-   `.claude/settings.json` inside this clone). This prevents the hooks from firing twice when
-   working inside the vault itself. Note for your user: this is why the repo's committed default
-   keeps the `hooks` block project-scoped — it's there for people who skip this step or install
-   manually, and this step is what mirrors their setup to match the global behavior.
+3. Remove the `hooks` block from the vault's own `.claude/settings.json` (keep
+   the `permissions` block). Otherwise the hooks fire twice inside the vault.
 
-4. Note for your user: this wiring is specific to this machine. If they set up a second machine
-   later, they'll need to repeat this step there too — each vault clone ships its own
-   `.claude/hooks/` folder, so it's the same four entries pointing at that machine's clone path.
+4. Tell your user this wiring is per-machine. A second machine repeats this step
+   with that machine's clone path.
 
-## Step 5 — verify
+## Step 6 — verify
 
-Confirm the session-start hook picks up the new personalization. From inside the clone, with
-`CLAUDE_PROJECT_DIR` set to the clone's path:
+From inside the clone, with `CLAUDE_PROJECT_DIR` pointing at it:
 
-```
-node .claude/hooks/session-start.mjs
-```
+- Git Bash / macOS / Linux:
+  `CLAUDE_PROJECT_DIR="$(pwd)" node .claude/hooks/session-start.mjs`
+- Windows PowerShell:
+  `$env:CLAUDE_PROJECT_DIR = (Get-Location).Path; node .claude/hooks/session-start.mjs`
 
-Use whichever form matches the shell you're actually running in:
+Check the printed JSON: `hookSpecificOutput.additionalContext` should contain
+the user's name from `core/USER.md`, plus a budget line showing `USER.md` and
+`MEMORY.md` usage. If it doesn't, stop and investigate before reporting success.
 
-- Git Bash / macOS / Linux: `CLAUDE_PROJECT_DIR="$(pwd)" node .claude/hooks/session-start.mjs`
-- Windows PowerShell: `$env:CLAUDE_PROJECT_DIR = (Get-Location).Path; node
-  .claude/hooks/session-start.mjs`
+**Empty output with exit code 0 means `core/.vault-active` is missing** — go
+back and finish Step 3.
 
-Check the printed JSON: `hookSpecificOutput.additionalContext` should contain the user's name
-from `_brain/USER.md`. If it doesn't, stop and investigate before telling your user setup is
-done. **Empty output with exit code 0 means `_brain/.vault-active` is missing** — go back and
-finish Step 3.
+If you wired global mode, also smoke-test the fifth hook: `Read` any file in
+`notes/`, then confirm a line appeared in `logs/signals/YYYY-MM.md`. A silent
+telemetry hook is the failure that hides longest.
 
-Tell your user they can now, optionally:
+## Step 7 — hand-off summary
 
-- Open the clone's folder as an Obsidian vault.
-- Open a fresh terminal in that folder, run `claude`, and just say hello — it should already
-  know who they are, with no further setup.
+Tell your user, concretely:
 
-## Step 6 — hand-off summary
+- What you created: the repo name, its URL, and that you verified it private.
+- Which scope they chose and what it means day to day.
+- **How things get in.** Two inlets: talk to the agent and the note gets written
+  there and then; or drop something they read into `raw/` and run `/ingest`.
+  There is no inbox to triage — that was tried and removed.
+- **`INDEX.md` is the map.** One line per page; it is what makes retrieval cheap,
+  and it is kept honest by a check rather than by discipline.
+- **`PROPOSALS.md` is where the agent asks for things.** Answering is a
+  checkbox. If rows pile up for more than a week, the system is asking wrong —
+  that is a signal, not a chore.
+- The commands: `/ingest`, `/file`, `/lesson`, `/recall`, `/curator`,
+  `/flywheel`, `/audit`. Mention `/lesson` specifically — the first time the
+  agent gets something wrong is the most useful thing that will happen this
+  week, and it only becomes an enforced check if it is captured.
+- That `core/OPEN_QUESTIONS.md` is a routing table for open questions, empty and
+  waiting for real ones.
+- That nothing runs on a schedule, on purpose. Session start prints one line
+  when something is actually due.
 
-Wrap up by telling your user, concretely:
-
-- What you created: the repo name, its GitHub URL, and that it was verified private.
-- Which brain scope they chose (global or project-only) and what that means day to day — global
-  means every Claude Code session on this machine loads and records into this brain;
-  project-only means it's only active inside this vault folder.
-- That quick, untriaged captures go into the `inbox/` folder and get filed later with `/triage`.
-- That `/triage` and `/curator` are available as slash commands inside a Claude Code session in
-  the vault, for filing inbox items and consolidating memory respectively.
-- That `_brain/OPEN_QUESTIONS.md` is a routing table for open questions, seeded with placeholder
-  examples — worth a few minutes replacing them with real ones, but not required to start.
-- That `scripts/` holds an **optional** deterministic automation roster (backup verification,
-  link sweeps, off-site bundles, scheduled `/triage`+`/curator`) that can be wired to Windows Task
-  Scheduler later via `scripts/register-tasks.ps1` — see `scripts/README.md`. Nothing in it runs
-  automatically; it's there for when they want it.
-
-That's the full install. Nothing else in this repo needs to run for a first-time setup.
+That's the full install. Nothing else in this repo needs to run for first-time
+setup.

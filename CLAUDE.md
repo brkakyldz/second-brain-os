@@ -9,29 +9,83 @@ is the single source of truth, readable by a human in Obsidian and by an agent
 with file tools alike.
 
 **Git is the only database.** Every change is a commit. `git log` is the audit
-trail. `git revert` is undo. GitHub is sync and sharing — nothing more.
+trail. `git revert` is undo. The remote is sync and backup — nothing more.
 
 ## Folder map
 
-- `_brain/` — the memory core, agent-managed and human-auditable.
+One folder per **lifecycle**, not per category. What a note *is* lives in its
+frontmatter `type:`; how it is written and retired decides which folder holds
+it. A note's maturity changes its `status:`, never its path — so a link never
+breaks because a thought grew up.
+
+- `core/` — Tier 0, always loaded by the SessionStart hook. Four files, budgeted.
   - `IDENTITY.md` — the assistant's persona and rules of engagement in this vault.
-  - `USER.md` — who the user is: role, preferences, working style.
-  - `MEMORY.md` — index of durable facts, one line each, pointers to detail.
-  - `memory/` — topic files holding the detail `MEMORY.md` points to.
-  - `playbooks/` — procedural memory: "how we do X here" recipes.
-  - `logs/` — append-only session logs, `YYYY-MM-DD_HHMM.md`.
-  - `templates/` — note templates (capture, daily, knowledge, project, playbook, decision).
-- `projects/` — one note per active project: goal, status, decisions.
-- `knowledge/` — atomic, wikilinked permanent notes (PKM layer).
-- `daily/` — daily notes, `YYYY-MM-DD.md`.
-- `inbox/` — untriaged quick captures; filed properly later.
-- `archive/` — closed projects and stale content — never deleted, always moved here.
+  - `USER.md` — who the owner is: role, preferences, working style.
+  - `MEMORY.md` — index of durable facts, one line each, pointing into `notes/`.
+  - `OPEN_QUESTIONS.md` — the live question ledger.
+- `notes/` — the memory store: every durable note, flat. Knowledge, projects,
+  playbooks and memory topics sit side by side and are told apart by
+  `type: knowledge | project | playbook | memory`, never by folder. Everything
+  here is wikilinked, has frontmatter, and earned its place.
+- `raw/` — the source store: immutable documents the owner put there.
+  Articles, papers, transcripts, exports, images. **The agent reads and never
+  writes** — no edit, rename, move or delete; the one exception is fetching a
+  source in when the owner asks for that specific fetch. Flat,
+  `YYYY-MM-DD_<slug>.<ext>`. This is the only place verbatim external content
+  may live, which is what keeps it out of `notes/`. Full is the healthy state.
+  Contract: `raw/README.md`.
+- `logs/` — append-only session logs, `YYYY-MM-DD_HHMM.md`, plus the signal
+  ledger in `logs/signals/`. Machine-written evidence — read it, never rewrite
+  it.
+- `archive/` — closed projects, stale content, and the historical working
+  record. Never deleted, always moved here.
+- `.claude/` — the machinery: `hooks/`, `skills/`, `templates/`, `eval/`. Not
+  vault content; this is how the agent runs, not what it knows about the world.
+- `scripts/` — helper jobs (link sweep, metrics, the proposals sweep), each
+  invoked by hand or by a skill. Nothing here runs on a clock.
+- Root files: `INDEX.md` is the page catalog — every note, one line each, the
+  first thing to read when answering a question. `PROPOSALS.md` is the one
+  approval surface. `README.md` is the vault's front door.
+
+## Distillation
+
+There are two paths into the memory store, and both end in distillation.
+
+**Live distillation inside a session** — the owner says something, the note
+gets written, nothing is ever queued. There is no capture inbox on purpose: a
+queue with no producer is a folder that fills up with guilt.
+
+**Ingest of a source** — `/ingest` reads a document in `raw/` or a registered
+root, discusses it with the owner, and distills it into `notes/` with a
+`source:` marker. The source is read once and stays read; the vault then answers
+from the distillation, never by re-reading. `raw/` has a producer by design —
+the owner saving what they are reading — which is the property an inbox lacks.
+
+- **Nothing enters `notes/` verbatim.** A thought is rewritten in original
+  wording, merged into an existing note, or linked from one. A copy that
+  survives in two places is two sources of truth.
+  The one legal home for verbatim external content is `raw/`, and a note points
+  back at it rather than reproducing it. Quote only where the exact phrasing is
+  the point — a line or two, in quotes, attributed.
+- **A source is never memory on its own.** Anything derived from `raw/` or a
+  registered root carries `source:`, enters as `confidence: low`, and reaches
+  `MEMORY.md` only through the corroboration gate. `USER.md` and
+  `core/IDENTITY.md` are closed to external content outright.
+- **Maturity is frontmatter, not location.** A note that grows from `seedling`
+  to `evergreen` never moves. Exactly one transition moves a file: anything →
+  `archive/` (it closed).
 
 ## Memory rules
 
 - `MEMORY.md`: one fact per line. When detail exists, end the line with a
-  pointer, e.g. `- Project X uses trunk-based dev → [[_brain/memory/project-x]]`.
-  Budget: **100 lines max**. `USER.md` budget: **40 lines max**.
+  pointer, e.g. `- Project X uses trunk-based dev → [[project-x]]`.
+  Budget: **4000 characters max**. `USER.md` budget: **2000 characters max**.
+  HTML comments don't count — they are instructions to the writer, not facts.
+  The unit is characters, not lines, because a line cap silently varies 2× with
+  how long your lines happen to run. The session-start header shows each file's
+  usage, so check it *before* writing, not after.
+- **Two things are never `MEMORY.md` entries.** The vault's own construction
+  history goes in a note of its own; open work items go to `PROPOSALS.md`.
 - **Never silently truncate.** When a file is over budget, consolidate (merge
   duplicates, archive stale entries) before adding anything new.
 - Every stored fact must be **timeless, dated, or a pointer to a live source**.
@@ -39,26 +93,25 @@ trail. `git revert` is undo. GitHub is sync and sharing — nothing more.
 - Facts derived from untrusted external content (web pages, tool output) carry
   a `source:` marker and are **never** written into `USER.md` or `IDENTITY.md`.
 - **Archive-first.** Stale or closed content moves to `archive/`, never into
-  the void. Deletion is allowed only in the three narrow cases defined in
-  [[_brain/playbooks/lifecycle-policy]] §6 — and the third (a superseded,
-  unlinked, non-load-bearing note) only with the owner's explicit approval.
+  the void. Deletion is allowed only in the narrow cases defined in
+  [[lifecycle-policy]] §6 — and the second (a superseded, unlinked,
+  non-load-bearing note) only with the owner's explicit approval.
 
 ## Lifecycle & self-evolution
 
-Full policy with rationale: [[_brain/playbooks/lifecycle-policy]]. The binding
-rules:
+Full policy with rationale: [[lifecycle-policy]]. The binding rules:
 
-- **Tiers.** Tier 0 (`IDENTITY.md` 40 / `USER.md` 40 / `MEMORY.md` 100 lines)
-  is always loaded and holds pointers, not detail. Everything else is reached
-  on demand via pointers and search — never preloaded.
-- **Different lifecycles per memory type.** Episodic (`logs/`, `daily/`) is
-  append-only and gets distilled then archived (logs at 30 days, dailies at
-  90). Semantic (`MEMORY.md`, `_brain/memory/`, `knowledge/`) is reconciled on
-  write: per new fact, decide ADD / MERGE / SUPERSEDE / NOOP — never blind
-  append. Procedural (`playbooks/`, skills) changes only by deliberate
-  revision, ≤150 lines per playbook.
-- **Triage within 48h.** Nothing leaves `inbox/` verbatim — rewrite, merge,
-  or link it first; then the raw capture is deleted as part of the move.
+- **Tiers.** Tier 0 (`IDENTITY.md` 40 lines / `USER.md` 2000 chars /
+  `MEMORY.md` 4000 chars) is always loaded and holds pointers, not detail.
+  Everything else is reached on demand via pointers and search — never
+  preloaded. Past ~10KB of session-start payload the harness stops inlining
+  Tier 0 at all, so the budgets protect loading itself, not just attention.
+- **Different lifecycles per memory type.** Episodic (`logs/`) is append-only
+  and gets distilled then archived (logs at 30 days). Semantic (`MEMORY.md`,
+  `notes/` with `type: memory | knowledge`) is reconciled on write: per new
+  fact, decide ADD / MERGE / SUPERSEDE / NOOP — never blind append. Procedural
+  (`type: playbook`, skills) changes only by deliberate revision, ≤150 lines
+  per playbook.
 - **Maturity through reuse.** `seedling → growing → evergreen` promotion only
   when a note is touched or linked from new work, never on a timer. Every new
   note gets ≥1 outbound wikilink before it is closed. **Evergreen gate:**
@@ -72,10 +125,10 @@ rules:
 - **Contradictions:** newer evidence wins, but the override is logged —
   supersession is visible, never silent. Mechanically: close the old fact's
   window and point it forward (bi-temporal keys, § Note conventions).
-- **Corroboration gate:** a once-seen fact enters `_brain/memory/` as
+- **Corroboration gate:** a once-seen fact enters `notes/` as `type: memory`,
   `confidence: low`; it reaches `MEMORY.md` only after a second independent
   session confirms it.
-- **Playbook gate:** a procedure is promoted to `_brain/playbooks/` only after
+- **Playbook gate:** a note is promoted to `type: playbook` only after
   **≥2 verified successful uses**. A workflow that just worked may be drafted
   as a playbook in the same session, marked `uses: 1`, and stays there until
   a second use corroborates it. Every playbook carries a one-line frontmatter
@@ -84,44 +137,55 @@ rules:
   automated pass — agents propose a diff, the owner applies it.
 - **Pins:** `pinned: true` exempts from demotion; max 10 vault-wide,
   re-justified quarterly.
-- **The loop:** weekly `/triage` + `/curator` (safe fixes applied, destructive
-  changes proposed as a table); monthly structural audit (report-only:
-  budgets, orphans, overdue reviews, tag sprawl); quarterly pin + policy
-  review. Audit and consolidation stay separate passes.
+- **The loop:** the trigger is the owner opening a session, never a clock. A
+  session-start due line reports what has gone stale; they run `/curator` (safe
+  fixes applied, destructive changes proposed as a table) or `/flywheel` when
+  they see it. The structural audit stays report-only — budgets, orphans,
+  overdue reviews, tag sprawl — and audit and consolidation stay separate
+  passes.
 - **Notification budget:** hard cap **3 proactive items per day**, counted
-  across *all* surfaces together (session start, daily note, briefs, alerts).
-  Everything past the cap becomes a pull artifact — a file the owner opens
-  when they want it, never a push. False positives kill a review queue
-  permanently.
-- **Acceptance logging:** every agent suggestion (link, MOC, pair, proposal)
-  is logged with accept/reject in `_brain/logs/`. Acceptance rate is the
-  master metric — a suggestion feature that isn't accepted gets killed, not
-  tuned forever.
+  across *all* surfaces together (session start, briefs, alerts, proposals).
+  Everything past the cap becomes a pull artifact — a file the owner opens when
+  they want it, never a push. False positives kill a review queue permanently.
+- **Acceptance logging:** every agent suggestion (link, MOC, pair, proposal) is
+  logged with accept/reject in `logs/`. Acceptance rate is the master metric —
+  a suggestion feature that isn't accepted gets killed, not tuned forever.
 - **Growth control:** no new folder/tag/taxonomy without an actual retrieval
   failure that demands it. Health metric is notes *re-used* this month, not
-  notes captured.
+  notes captured. **No new hook or script without an actual failure that
+  demands it either** — the same gate folders and tags already pass. Machinery
+  is harder to remove than a folder, because it acquires callers.
 
 ## Session-log rule (standing instruction to the agent)
 
 After completing substantial work in a session, append an entry to
-`_brain/logs/YYYY-MM-DD_HHMM.md` covering what happened, what was decided, and
-what was learned. Tag each item with one of: `decision | bugfix | feature |
+`logs/YYYY-MM-DD_HHMM.md` covering what happened, what was decided, and what
+was learned. Tag each item with one of: `decision | bugfix | feature |
 discovery | preference | change`. If a durable fact emerged, also update
 `MEMORY.md` (respecting its budget and consolidation rule above).
 
 ## Note conventions
 
-- Filenames: `kebab-case.md`.
-- Internal links: `[[wikilinks]]`, used with surrounding sentence context (not
-  bare link lists).
+- Filenames: `kebab-case.md`. Filenames are vault-unique, which is what lets
+  links stay short.
+- Internal links: `[[wikilinks]]`, **short form — the filename without a path
+  or extension** (`[[project-x]]`, never `[[notes/project-x]]`). Used with
+  surrounding sentence context, not as bare link lists.
 - Frontmatter: flat YAML, this schema —
-  - `type`: `project | knowledge | daily | log | playbook | capture | decision`
+  - `type`: `project | knowledge | memory | playbook | log | decision`. The
+    live list is `ALLOWED_TYPES` in `.claude/hooks/checks.mjs`; when the two
+    disagree, the check is the newer of the pair.
   - `created`: `YYYY-MM-DD`
   - `tags`: list
   - `status`: knowledge → `seedling | growing | evergreen`; projects →
-    `active | paused | done`; decisions → `accepted | superseded | reversed`
+    `active | paused | done`; decisions → `accepted | superseded | reversed`;
+    memory → the knowledge values (a fact matures the same way); playbooks →
+    `active | superseded`
   - `source`: optional, required for anything derived from untrusted content
   - `related`: optional list of `[[wikilinks]]`
+  - `aliases`: optional. Its job is to catch the query that would otherwise
+    miss the note — including the same term in another language, since
+    retrieval here is lexical.
 - Dates are always `YYYY-MM-DD`.
 - **Bi-temporal keys** — optional, for durable facts whose truth has a window:
   `valid_from` (when the fact became true), `valid_to` (when it stopped),
