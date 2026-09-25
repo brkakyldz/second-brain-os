@@ -87,7 +87,7 @@ tree is platform-bound.
 
 ## Quickstart
 
-**Requirements:** git, Node.js 18+, a GitHub account, and
+**Requirements:** git 2.28+, Node.js 18.13+, a GitHub account, and
 [Claude Code](https://claude.com/product/claude-code) or
 [Codex](https://openai.com/codex) — or both. Obsidian is optional but
 recommended — the vault is plain Markdown either way.

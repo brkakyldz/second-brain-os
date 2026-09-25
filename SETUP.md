@@ -29,7 +29,8 @@ node --version
 gh auth status
 ```
 
-- `node --version` must be 18 or higher.
+- `node --version` must be 18.13 or higher, and `git --version` 2.28 or
+  higher — the doctors and the tests use newer git options.
 - If `gh` is missing or not logged in, **stop here**. Tell the user to install
   the [GitHub CLI](https://cli.github.com) and run `gh auth login`. Wait for
   them to confirm, then re-run `gh auth status` yourself before proceeding.
@@ -234,11 +235,11 @@ hand, one per skill, with `<VAULT>` as above:
 - Git Bash / macOS / Linux:
   `mkdir -p ~/.agents/skills && ln -s "<VAULT>/.agents/skills/closeout" ~/.agents/skills/closeout`
 - Windows PowerShell:
-  `New-Item -ItemType Junction -Path "$HOME\.agents\skills\closeout" -Target "<VAULT>\.agents\skills\closeout"`
+  `New-Item -ItemType Directory -Force "$HOME\.agents\skills" | Out-Null; New-Item -ItemType Junction -Path "$HOME\.agents\skills\closeout" -Target "<VAULT>\.agents\skills\closeout"`
 
-(In Git Bash on Windows, `ln -s` makes a copy by default — use the
-PowerShell line there.) `brain-doctor.mjs` accepts a
-Codex link in either folder.
+In Git Bash on Windows, `ln -s` makes a copy by default, so use the
+PowerShell line there. `brain-doctor.mjs` accepts a Codex link in either
+folder.
 
 Tell your user this wiring is per-machine. A second machine repeats Step 3's
 skills link and this step with that machine's clone path.
