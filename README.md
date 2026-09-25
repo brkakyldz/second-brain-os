@@ -17,7 +17,8 @@ and removed are listed as removed rather than quietly dropped — see
 - **`core/` is the always-loaded tier**, and it is deliberately tiny:
   `IDENTITY.md` (how the assistant behaves), `USER.md` (who you are, 2000-char
   budget), `MEMORY.md` (durable facts, one line each, 4000-char budget, pointers
-  instead of detail), `OPEN_QUESTIONS.md` (what the vault is listening for).
+  instead of detail), and `OPEN_QUESTIONS.md` (what the vault is listening
+  for), which arrives as a pointer rather than inlined.
 - **One folder per lifecycle, not per category.** `notes/` is flat and holds
   every durable page; what a note *is* lives in its `type:` frontmatter, and how
   mature it is lives in `status:`. A note never moves because it grew up, so a
@@ -62,7 +63,7 @@ Full design rationale: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## What's inside
 
 ```
-core/         Tier 0, always loaded: IDENTITY, USER, MEMORY, OPEN_QUESTIONS
+core/         Tier 0: IDENTITY, USER, MEMORY inlined; OPEN_QUESTIONS by pointer
 notes/        the memory store — flat, wikilinked, told apart by type:
 raw/          immutable sources you put there; the agent reads, never writes
 logs/         append-only session logs + logs/signals/, the event ledger
@@ -157,8 +158,9 @@ one place:
 
 - **Claude Code:** move the `SessionStart` entry out of this repo's
   `.claude/settings.json` into your user-level `~/.claude/settings.json`,
-  changing `${CLAUDE_PROJECT_DIR}` to the absolute path of your vault. Leave the
-  repo's own `hooks` block empty, or it fires twice inside the vault.
+  changing `${CLAUDE_PROJECT_DIR}` to the absolute path of your vault. Empty the
+  repo's own `hooks` block and commit that file, or it fires twice inside the
+  vault.
 - **Codex:** add one `SessionStart` entry to `~/.codex/hooks.json` that runs
   `node "<your vault>/.codex/hooks/session-start.mjs"`, then re-trust the hook
   in Codex. Don't also put it in a project-level `.codex/hooks.json` — Codex
