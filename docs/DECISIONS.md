@@ -9,6 +9,10 @@ that says *why* a line exists is worth more than a tidy one that doesn't. Where
 a decision was later reversed, the reversal is in this table too; that is the
 point of keeping the numbers.
 
+From 0045 on, the full record ships beside this index in `docs/decisions/`,
+generalized: the reasoning is kept, the names and figures of the reference
+instance's projects are not.
+
 You inherit the outcomes, not the obligations. Nothing here binds your vault —
 but if you're about to change something a number is attached to, this table
 tells you what it was protecting.
@@ -58,6 +62,8 @@ tells you what it was protecting.
 | 0042 | accepted | Vault commits are task-owned: no hook stages or commits the whole tree; one user-level SessionStart per runtime (supersedes 0008, 0027) |
 | 0043 | accepted | A research report that crowds out retrieval is kept as an archived snapshot plus a short live distillation (amends 0035) |
 | 0044 | accepted | Claude Code and Codex are equal runtimes over one kit — `AGENTS.md` is the constitution, `.agents/skills/` the one skills copy (amends 0042) |
+| 0045 | accepted | Project execution state lives in the project repo (contract, `CURRENT_STATE`, `WORKLOG`, run reports); the vault keeps what outlives a project — [full record](decisions/0045-project-execution-state-lives-in-the-repo.md) |
+| 0046 | accepted | Template v1.1 published ahead of the two-week bar at the owner's request; an override for one batch, not a new rule (amends 0015, 0036) — [full record](decisions/0046-template-v1-1-published-ahead-of-the-bar.md) |
 
 There is no 0031: the number was allocated to a decision that was abandoned
 before it was written. Gaps are left in place rather than renumbered — a
