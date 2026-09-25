@@ -13,9 +13,10 @@ reasoning is kept, the names and figures of its projects are not.
 
 ## Context
 
-The rule before this one said the brain was the only working record: durable
-memory, open work and session history lived in the vault and nowhere else, so
-that no project would grow a parallel record. The projects did the opposite,
+Until now a standing instruction — never an ADR of its own — said the brain
+was the only working record: durable memory, open work and session history
+lived in the vault and nowhere else, so that no project would grow a parallel
+record. The projects did the opposite,
 and they were right to. A survey of the reference instance's repos and session
 logs found:
 

@@ -11,6 +11,9 @@ outcome:
 
 # Decision Title
 
+<!-- A decision note lives in notes/ while it is live and moves to archive/
+     once superseded or reversed — docs/DECISIONS.md § Recording your own. -->
+
 ## Context
 <!-- What forced a decision now. One paragraph. -->
 

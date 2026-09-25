@@ -359,8 +359,9 @@ How the pieces meet:
 - **Global mode carries the rule into every project.** Outside the vault the
   SessionStart hook injects standing rules: read the repo's `AGENTS.md`,
   STATE and last WORKLOG lines before planning; end substantial work with
-  `/closeout`; never copy live status into the brain. Its first line, "The
-  brain lives at …", is how the skills find the vault from any repo.
+  `/closeout`; never copy live status into the brain. The standing-rules
+  section names the vault in one sentence, "The brain lives at …", and that
+  sentence is how the skills find the vault from any repo.
 - **Three skills cross the boundary** — `/closeout`, `/lesson`, `/recall`.
   Each resolves the brain (the vault itself, that SessionStart line,
   `BRAIN_DIR`, or its own link target) and writes only brain paths into the

@@ -18,8 +18,10 @@ frontmatter `type:`; how it is written and retired decides which folder holds
 it. A note's maturity changes its `status:`, never its path — so a link never
 breaks because a thought grew up.
 
-- `core/` — Tier 0, injected by the SessionStart hook. Four files; the first
-  three are budgeted, and `OPEN_QUESTIONS.md` arrives as a pointer, not inlined.
+- `core/` — Tier 0, injected by the SessionStart hook. Four files: inside the
+  vault the first three are inlined with their budgets and `OPEN_QUESTIONS.md`
+  arrives as a pointer; a project session in global mode gets `USER.md` and
+  `MEMORY.md` only.
   - `IDENTITY.md` — the assistant's persona and rules of engagement in this vault.
   - `USER.md` — who the owner is: role, preferences, working style.
   - `MEMORY.md` — index of durable facts, one line each, pointing into `notes/`.
@@ -57,13 +59,17 @@ breaks because a thought grew up.
   runs on a clock: unattended scheduling was retired (ADR 0033).
 - `docs/` — documentation about the vault, not vault content: the
   architecture guide, the decision index (`DECISIONS.md`) and the template's
-  full decision records (`docs/decisions/`).
+  full decision records (`docs/decisions/`). Your own decisions are
+  `type: decision` notes in `notes/`, archived once superseded — one home,
+  described in `DECISIONS.md` § Recording your own.
 - Root files: `INDEX.md` is the page catalog — every note, one line each, the
   first thing to read when answering a question. `PROPOSALS.md` is a list of
   open work the owner keeps by hand — no pass writes it. `README.md` is the
   vault's front door; `SETUP.md` and `install.mjs` are the agent-run and the
   manual installer. `CLAUDE.md` only imports this file (`@AGENTS.md`) plus
   any Claude-only lines — one constitution, never two copies (ADR 0044).
+  `LICENSE` is the template's MIT license; `.gitignore`, `.gitattributes`
+  and `.pre-commit-config.yaml` are git plumbing (the last one opt-in).
 
 ## Distillation
 
@@ -167,7 +173,8 @@ binding rules:
   separate passes. Pins and policy get re-justified when the audit says they
   need it, not on a calendar.
 - **Notification budget:** hard cap **3 proactive items per day**, counted
-  across *all* surfaces together (session start, briefs, alerts, pass reports).
+  across *all* surfaces together (session start, pass reports, anything else
+  that speaks up unasked).
   Everything past the cap becomes a pull artifact — a file the owner opens when
   they want it, never a push. False positives kill a review queue permanently.
 - **Suggestions are acted on or dropped, not queued.** A pass reports its
@@ -176,9 +183,10 @@ binding rules:
   tuned forever. A decision worth recording may still be logged by hand as an
   `acceptance` / `rejection` line in the signal ledger.
 - **Growth control:** no new folder/tag/taxonomy without an actual retrieval
-  failure that demands it. Health metric is notes *re-used* this month, not
-  notes captured. **No new hook or script without an actual failure that
-  demands it either** — the same gate folders and tags already pass. Machinery
+  failure that demands it. Vault health is judged, not counted: whether notes
+  get reworked and relied on in new work, never how many were captured or
+  opened (the re-use count was retired with the telemetry, ADR 0039). **No new
+  hook or script without an actual failure that demands it either** — the same gate folders and tags already pass. Machinery
   is harder to remove than a folder, because it acquires callers.
 
 ## Session-log rule (standing instruction to the agent)

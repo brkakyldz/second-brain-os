@@ -18,7 +18,8 @@ and removed are listed as removed rather than quietly dropped — see
   `IDENTITY.md` (how the assistant behaves), `USER.md` (who you are, 2000-char
   budget), `MEMORY.md` (durable facts, one line each, 4000-char budget, pointers
   instead of detail), and `OPEN_QUESTIONS.md` (what the vault is listening
-  for), which arrives as a pointer rather than inlined.
+  for), which arrives as a pointer rather than inlined. A session in any other
+  project (global mode) gets `USER.md` and `MEMORY.md` only.
 - **One folder per lifecycle, not per category.** `notes/` is flat and holds
   every durable page; what a note *is* lives in its `type:` frontmatter, and how
   mature it is lives in `status:`. A note never moves because it grew up, so a
