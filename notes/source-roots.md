@@ -25,6 +25,10 @@ copies of the same bytes is the failure this table exists to prevent.
 
 ## Adding a row
 
+A project repo that has a project card (`type: project` with `repo:`) is
+already registered by its card; add it here only when the vault reads it for
+something beyond that project.
+
 Register a root when you find yourself about to copy a folder into `raw/`, or
 when the agent has read from it more than once. A row costs nothing; a
 duplicated corpus costs you the ability to say which copy is true.

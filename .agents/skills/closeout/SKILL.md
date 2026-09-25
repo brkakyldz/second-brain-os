@@ -139,7 +139,7 @@ own paths.
 Default: skip. Only a cross-project durable fact qualifies, and the brain's
 corroboration gate still applies: a once-seen fact goes to `<brain>/notes/` as
 `type: memory`, `confidence: low`, and reaches `<brain>/core/MEMORY.md` only
-when a second independent session confirms it. Check the 4000-character
+when a second independent source confirms it. Check the 4000-character
 budget first; consolidate, never truncate. Project status never qualifies.
 
 ## Finish

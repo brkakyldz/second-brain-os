@@ -9,9 +9,12 @@ that says *why* a line exists is worth more than a tidy one that doesn't. Where
 a decision was later reversed, the reversal is in this table too; that is the
 point of keeping the numbers.
 
-From 0045 on, the full record ships beside this index in `docs/decisions/`,
-generalized: the reasoning is kept, the names and figures of the reference
-instance's projects are not.
+**Where the full records live.** For 0001–0044 this table is the whole of what
+ships: the full records stay in the reference instance. From 0045 on, the full
+record ships beside this index as `docs/decisions/NNNN-<slug>.md`,
+generalized — the reasoning is kept, the names and figures of the reference
+instance's projects are not. An annotation in *italics* says where the
+template differs from the reference instance.
 
 You inherit the outcomes, not the obligations. Nothing here binds your vault —
 but if you're about to change something a number is attached to, this table
@@ -29,19 +32,19 @@ tells you what it was protecting.
 | 0008 | superseded by 0042 | Global brain mode — hooks live at user level, the brain follows you into every project (the global SessionStart survives in 0042/0044) |
 | 0009 | accepted | The installer offers global mode as the recommended choice |
 | 0010 | superseded by 0018 | Hybrid retrieval as a derived index — lexical first, vectors on a named trigger |
-| 0011 | accepted | Enforcement-first memory gates — scoped PreToolUse denial alongside fail-open automation |
+| 0011 | accepted | Enforcement-first memory gates — scoped PreToolUse denial alongside fail-open automation *(the template wires no PreToolUse gate; see 0023)* |
 | 0012 | accepted | A write rubric, independent corroboration, delta-only curation |
-| 0013 | accepted | Self-improvement flywheel on manufactured feedback; survival replaces acceptance as the outcome anchor |
+| 0013 | accepted | Self-improvement flywheel on manufactured feedback; survival replaces acceptance as the outcome anchor *(the `/flywheel` pass itself was retired by 0038)* |
 | 0014 | accepted | Hooks are gated on an explicit vault activation marker — a fresh clone is inert |
 | 0015 | accepted | The vault is a personal tool first; this template is updated in batches, behind a two-week bar |
 | 0016 | accepted | The working record lives in the private vault, not the template |
-| 0017 | accepted | The reporting contract is a global standard, not a vault-local habit |
+| 0017 | accepted | The reporting contract is a global standard, not a vault-local habit *(reference instance only — the template ships no reporting contract)* |
 | 0018 | accepted | Retrieval is lexical + links + conventions; a retrieval-failure ledger is the only trigger to revisit it |
 | 0019 | amended by 0038 | The flywheel is capture → corroborate → enforce-or-retire; the escalation ladder is the mechanism |
-| 0020 | accepted | One append-only signal ledger plus a machine-written session trace |
+| 0020 | accepted | One append-only signal ledger plus a machine-written session trace *(the session trace went with 0038; the ledger stays)* |
 | 0021 | accepted | No off-site git bundle job — the local clone plus the remote are the backup |
-| 0022 | accepted | Seed checks compile standing conventions into enforced rules |
-| 0023 | accepted | The PreToolUse write gate is reinstated, scoped to vault paths and the control plane |
+| 0022 | accepted | Seed checks compile standing conventions into enforced rules *(since 0042 nothing runs them automatically; they are kept as code)* |
+| 0023 | accepted | The PreToolUse write gate is reinstated, scoped to vault paths and the control plane *(no PreToolUse gate is wired in v1.1 — protected files are a convention, `notes/lifecycle-policy.md` §8)* |
 | 0024 | accepted | Instrument what the policy claims to measure — reuse sidecar, rollup, caused retrieval failures, computed acceptance rate (amended by 0038, 0039) |
 | 0025 | superseded by 0038 | The session log gets a mechanism — transcript flush on SessionEnd, swept at SessionStart |
 | 0026 | accepted | One approval surface (`PROPOSALS.md`); resurfacing is question-framed and inbound-poor (proposal production retired by 0038) |
@@ -49,7 +52,7 @@ tells you what it was protecting.
 | 0028 | accepted | The archive is flat — no subtree structure inside `archive/` |
 | 0029 | accepted | This template is re-derived from the vault; the old `_brain/` layout is retired |
 | 0030 | accepted | Tier-0 budgets are counted in characters and shown to the agent up front |
-| 0032 | accepted | Machine state leaves the tracked tree; the reuse metric gets a trigger that actually runs |
+| 0032 | accepted | Machine state leaves the tracked tree; the reuse metric gets a trigger that actually runs *(the reuse metric was retired by 0039)* |
 | 0033 | accepted | Unattended scheduled maintenance retired — the trigger becomes session start |
 | 0034 | accepted | The capture inbox and every mobile-capture plan are removed |
 | 0035 | accepted | A `raw/` source layer, `/ingest` to read a source into the wiki, `/file` to keep an answer, and `INDEX.md` as the page catalog (amends 0002 and 0034) |
@@ -73,7 +76,13 @@ decision log you can renumber is one you can quietly rewrite.
 
 Once your vault is running, keep doing this. A choice that is expensive to
 reverse — a folder architecture, a retrieval strategy, a rule about what the
-agent may delete — gets a dated file with context, decision, rationale, and
+agent may delete — gets a dated record with context, decision, rationale, and
 consequences, and a `status:` that later decisions can flip to `superseded by
 NNNN`. The value is not the writing; it is that the next contradiction is
 visible instead of silent.
+
+In your vault a decision is a note: `type: decision`, created from
+`.claude/templates/decision.md`, kept in `notes/` while it is live and moved
+to `archive/` once it is superseded or reversed (the reference instance files
+its ADRs straight into `archive/`). `docs/decisions/` stays the template's
+own record, so taking a newer template version never touches yours.

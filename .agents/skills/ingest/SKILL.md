@@ -1,6 +1,6 @@
 ---
 name: ingest
-description: Reads a raw source into the wiki — a file in raw/, a registered source root, or a document the owner points at — and distills it into notes/, reconciling it against what the vault already believes. Use when the owner says "bunu ingest et", "şu makaleyi oku ve işle", "raw'daki dosyayı al", "ingest this paper", or invokes /ingest.
+description: Reads a raw source into the wiki — a file in raw/, a registered source root, or a document the owner points at — and distills it into notes/, reconciling it against what the vault already believes. Use when the owner says "ingest this paper", "read this article into the notes", "take the file in raw/", the same in any language, or invokes /ingest.
 ---
 
 # Ingest
@@ -52,8 +52,8 @@ not the goal; not re-reading the source is.
 
 ### 3. Reconcile against what the vault already believes — in two steps
 
-Never decide in one pass (P-004: single-step freshness judging measures ~54%,
-split ~82-93%).
+Never decide in one pass: in the reference instance, single-step freshness
+judging measured ~54% correct, the two-step split ~82-93%.
 
 **3a. List candidates.** Search for what this source touches, following the
 four layers in `/recall`: `INDEX.md` first, then `grep` over `notes/`, then
@@ -77,8 +77,9 @@ The old belief and the date it died are themselves data.
 - **`source:` is mandatory** in frontmatter: `raw/2026-09-02_slug.md` or the
   root path plus the file. Anything derived from external content carries it.
 - **Date anything perishable.** A version number, a price, a benchmark result,
-  "the current state of X" — each gets the date it was true. Fast-decaying
-  material gets `review_by: created + 12 months`.
+  "the current state of X" — each gets the date it was true. Add
+  `review_by:` only where the decay is genuinely predictable
+  ([[lifecycle-policy]] §5).
 - New note → `.claude/templates/knowledge.md`, `status: seedling`,
   `confidence: low` if the claim is single-sourced. Merge into an existing note
   → append or revise the relevant section, never a wholesale rewrite of a note
@@ -99,8 +100,8 @@ in both places, not just the new one.
 - A row in the right category for any new page, with its one-line description.
 - Fix the description of any page whose scope this ingest changed.
 
-The `index-coverage` check will fire on a missed note. Do not rely on it —
-it is the net, not the procedure.
+`node scripts/link-sweep.mjs` reports a note missing from `INDEX.md`. Do
+not rely on it — it is the net, not the procedure.
 
 ### 7. Append a log entry
 
@@ -113,7 +114,7 @@ session does not re-ingest the same source hoping for more.
 
 - **`MEMORY.md` is never written by an ingest.** A fact from a source enters
   `notes/` as `type: memory`, `confidence: low`; it reaches `MEMORY.md` only
-  after a second *independent* session confirms it. External content is
+  after a second *independent* source confirms it. External content is
   hard-vetoed from `USER.md` and `core/IDENTITY.md` entirely (ADR 0012).
 - **`raw/` is never modified.** Not renamed, not reformatted, not tidied, not
   deleted after reading. If a source is wrong, that is a fact about the source

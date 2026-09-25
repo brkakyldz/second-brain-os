@@ -45,8 +45,9 @@ the pointer claims); facts that appear in two places with different dates or
 wording; a `MEMORY.md` line whose detail note has since moved on; an ADR
 whose `status:` no longer matches what later ADRs did to it.
 
-Not re-reported: what the compiled checks already cover
-(`note-conventions`, `wikilink-short-form`).
+Report the rules the compiled checks encode (`note-conventions`,
+`wikilink-short-form`) like any other: since v1.1 nothing runs those checks
+automatically, so the audit is where a violation surfaces.
 
 ## How
 
@@ -56,7 +57,8 @@ not run a report-writing helper such as `link-sweep.mjs` during the audit; read
 its latest report or reproduce the count without writes.
 
 Read `core/`, `INDEX.md`, the previous audit, all live note frontmatter and the
-full text needed for semantic claims, every ADR in `archive/`, and relevant
+full text needed for semantic claims, every decision note (`type: decision`,
+in `notes/` and `archive/`), and relevant
 logs from the last thirty days. If the live corpus cannot fit in one context,
 process it in bounded batches and record the coverage; never claim a full
 semantic read that did not occur. A finding from a batch summary enters the

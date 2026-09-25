@@ -45,7 +45,9 @@ history.
 - **`check-fire` lines are deduplicated** — one line per (check, file, detail)
   per month file, so a stuck violation cannot flood the ledger.
 - **Skills write lines via the CLI, never by hand-formatting:**
-  `node .claude/hooks/append-signal.mjs <type> <field>... [--sid <id>]`.
+  `node .claude/hooks/append-signal.mjs <type> <field>... [--sid <id>]`. From
+  another repo, call it by the vault's path — it resolves the vault from its
+  own location.
 
 ## Required payload fields
 

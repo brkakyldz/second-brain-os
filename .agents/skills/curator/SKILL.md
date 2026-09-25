@@ -60,9 +60,9 @@ unsourced beliefs poisons every session after it.
      entirely if nothing forward-looking remains.
    - Pointer with a dead target → fix the pointer or remove the line.
 
-4. **Distill old logs.** For every file in `logs/` named
-   `YYYY-MM-DD_HHMM.md` or `YYYY-MM-DD_HHMM-<slug>.md` whose date is more than
-   30 days before today:
+4. **Distill old logs.** For every file directly in `logs/` whose date prefix
+   is more than 30 days before today — session logs and pass reports alike,
+   never the signal ledger in `logs/signals/`:
    - Extract durable facts and decisions into the matching
      `notes/<topic>.md` topic file (append, don't duplicate).
    - Move the original log file to `archive/` (never delete it — the raw

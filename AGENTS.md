@@ -18,7 +18,8 @@ frontmatter `type:`; how it is written and retired decides which folder holds
 it. A note's maturity changes its `status:`, never its path — so a link never
 breaks because a thought grew up.
 
-- `core/` — Tier 0, always loaded by the SessionStart hook. Four files, budgeted.
+- `core/` — Tier 0, injected by the SessionStart hook. Four files; the first
+  three are budgeted, and `OPEN_QUESTIONS.md` arrives as a pointer, not inlined.
   - `IDENTITY.md` — the assistant's persona and rules of engagement in this vault.
   - `USER.md` — who the owner is: role, preferences, working style.
   - `MEMORY.md` — index of durable facts, one line each, pointing into `notes/`.
@@ -37,9 +38,10 @@ breaks because a thought grew up.
   may live, which is what keeps it out of `notes/`. Full is the healthy state.
   Contract: `raw/README.md`.
 - `logs/` — append-only session logs, `YYYY-MM-DD_HHMM.md` or
-  `YYYY-MM-DD_HHMM-<slug>.md` (the date prefix is the part that never varies),
-  plus the signal ledger in `logs/signals/`. Machine-written evidence — read
-  it, never rewrite it.
+  `YYYY-MM-DD_HHMM-<slug>.md`; a pass report names its pass instead
+  (`YYYY-MM-DD_link-sweep.md`, `YYYY-MM-DD_audit.md`) — the date prefix is
+  the part that never varies. Plus the signal ledger in `logs/signals/`.
+  Written as evidence — read it, never rewrite it.
 - `archive/` — closed projects, stale content, and the historical working
   record. Never deleted, always moved here.
 - `.agents/skills/` — the vault's skills, the one canonical copy both runtimes
@@ -51,12 +53,16 @@ breaks because a thought grew up.
   holds only the thin Codex SessionStart adapter. Not vault content; this is
   how the agent runs, not what it knows about the world.
 - `scripts/` — helper jobs (link sweep, metrics, retrieval eval, brain
-  doctor, project doctor), each invoked by hand or by a skill. Nothing here runs on a clock:
-  unattended scheduling was retired (ADR 0033).
+  doctor, project doctor), each invoked by hand or by a skill. Nothing here
+  runs on a clock: unattended scheduling was retired (ADR 0033).
+- `docs/` — documentation about the vault, not vault content: the
+  architecture guide, the decision index (`DECISIONS.md`) and the template's
+  full decision records (`docs/decisions/`).
 - Root files: `INDEX.md` is the page catalog — every note, one line each, the
   first thing to read when answering a question. `PROPOSALS.md` is a list of
   open work the owner keeps by hand — no pass writes it. `README.md` is the
-  vault's front door. `CLAUDE.md` only imports this file (`@AGENTS.md`) plus
+  vault's front door; `SETUP.md` and `install.mjs` are the agent-run and the
+  manual installer. `CLAUDE.md` only imports this file (`@AGENTS.md`) plus
   any Claude-only lines — one constitution, never two copies (ADR 0044).
 
 ## Distillation
@@ -127,21 +133,24 @@ binding rules:
   (`type: playbook`, skills) changes only by deliberate revision, ≤150 lines
   per playbook.
 - **Maturity through reuse.** `seedling → growing → evergreen` promotion only
-  when a note is touched or linked from new work, never on a timer. Every new
+  when someone reworks the note in new work — never on a timer, never from an
+  access count. Every new
   note gets ≥1 outbound wikilink before it is closed. **Evergreen gate:**
   `status: evergreen` additionally requires a 1–2 sentence top-line
   distillation at the head of the note. If the idea can't be stated that
   briefly, it hasn't matured yet — leave it `growing`.
-- **Domain-dependent staleness.** Fast-decaying notes (tools, versions, APIs)
-  get `review_by: created + 12 months`; stable concepts get none. Feedback
-  memories are re-challenged after 90 days. Overdue `review_by` flags, never
-  auto-deletes.
+- **Domain-dependent staleness.** A claim about a tool, version, API or price
+  is checked against its source whenever something depends on it, whatever its
+  date. `review_by:` is optional, for decay that is genuinely predictable;
+  stable concepts get none. Correction memories are re-challenged after ~90
+  days. An overdue `review_by` is reported by the audit, never auto-deleted.
 - **Contradictions:** newer evidence wins, but the override is logged —
   supersession is visible, never silent. Mechanically: close the old fact's
   window and point it forward (bi-temporal keys, § Note conventions).
 - **Corroboration gate:** a once-seen fact enters `notes/` as `type: memory`,
   `confidence: low`; it reaches `MEMORY.md` only after a second independent
-  session confirms it.
+  source confirms it — independence is a property of the source, not a count
+  of sessions.
 - **Playbook gate:** a note is promoted to `type: playbook` only after
   **≥2 verified successful uses**. A workflow that just worked may be drafted
   as a playbook in the same session, marked `uses: 1`, and stays there until
@@ -236,9 +245,9 @@ repo holds execution state (ADR 0045). `/closeout` writes it.
 - Pull before you write.
 - **Commits are task-owned (ADR 0042, 0044).** Claude Code and Codex may work
   in this checkout at the same time, so no hook commits for you and no task
-  stages the whole tree. Stage the explicit paths your task wrote, commit once with a
-  message that names the work, and leave every other dirty file alone — it
-  belongs to whoever created it. `git add -A` / `git add .` are never part of
+  stages the whole tree. Stage the explicit paths your task wrote, commit once
+  with a message that names the work, and leave every other dirty file alone —
+  it belongs to whoever created it. `git add -A` / `git add .` are never part of
   the protocol.
 - Never run a second sync mechanism (iCloud, Google Drive, Syncthing) over
   this folder — one sync mechanism per vault, ever.

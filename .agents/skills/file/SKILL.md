@@ -1,6 +1,6 @@
 ---
 name: file
-description: Files an analysis produced in this conversation back into notes/ as a proper page, so a good answer does not die in the transcript. Use when the owner says "bunu dosyala", "bu analizi notlara al", "bunu kaydet", "file this", "keep this analysis", or invokes /file.
+description: Files an analysis produced in this conversation back into notes/ as a proper page, so a good answer does not die in the transcript. Use when the owner says "file this", "keep this analysis", "put that in the notes", the same in any language, or invokes /file.
 ---
 
 # File
@@ -69,8 +69,9 @@ wiki page are different artifacts:
 - **Keep the evidence, drop the hedging.** Numbers, file paths, dates, counts —
   those are what make the page worth having. "Probably", "it seems", "I think"
   either become a confidence marker in frontmatter or become a claim.
-- **English**, per `core/IDENTITY.md`, even though the conversation was Turkish.
-  A Turkish `aliases:` entry is welcome and is the point of ADR 0018.
+- **In the vault's language**, per `core/IDENTITY.md`, even when the
+  conversation was in another one. An `aliases:` entry in the conversation
+  language is welcome and is the point of ADR 0018.
 
 ### 4. Frontmatter
 

@@ -22,10 +22,10 @@ and the open-work surface is `PROPOSALS.md`. Four files, four jobs, no overlap.
 responsibility: a note without a row here is a page nothing can find.
 
 **What keeps it honest:** `node scripts/link-sweep.mjs`, which compares every
-file in `notes/` against this table and takes no view of git at all, and the
-`index-coverage` check in `.claude/hooks/checks.mjs` for the files a task has
-changed. Both are **warnings, not gates** — a missing row is reported, never
-blocked (ADR 0035, 0038).
+file in `notes/` against this table and takes no view of git at all. It is a
+**warning, not a gate** — a missing row is reported, never blocked (ADR 0035,
+0038). The `index-coverage` check in `.claude/hooks/checks.mjs` encodes the
+same rule for changed files, but since v1.1 nothing runs it automatically.
 
 Keep the description column about *what the page is for*, not what it contains.
 A row that reads "notes on X" tells a future session nothing it could not have
@@ -38,7 +38,7 @@ open without opening it.
 
 | Page | What it is | Status |
 |---|---|---|
-| _(your first project note goes here)_ | | |
+| _(your first project card goes here — `.claude/templates/project.md`)_ | | |
 
 ## Knowledge — the world
 
