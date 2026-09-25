@@ -219,7 +219,7 @@ function correctionRecurrenceSection() {
 // in 2026-08. The
 // `retrieval-rollup` lines already in the ledger stay as history.
 
-// --- Section 4b: retrieval failures by cause (A3) ------------------------
+// --- Section 4b: retrieval failures by cause ------------------------------
 // The open question is whether a repeating *query shape* defeats grep
 // (ADR 0018). Only one cause
 // answers it: `paraphrase-miss`. The rest argue for aliases, notes, or

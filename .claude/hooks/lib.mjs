@@ -167,8 +167,9 @@ export function getGitDir(repoRoot) {
 // The vault activation gate (ADR 0014). Every hook is inert without the
 // core/.vault-active marker: no pull, no Tier-0 injection. It is what keeps
 // the public template — and a clone that has not been set up yet — from
-// acting on its own (it used to guard a committing, pushing checkpoint too). Documented
-// since 2026-08-18 but never implemented until 2026-08-22.
+// acting on its own (until v1.1 it also guarded a committing, pushing
+// checkpoint). Documented since 2026-08-18 but never implemented until
+// 2026-08-22.
 export function isVaultActive(repoRoot) {
   try {
     return existsSync(path.join(repoRoot, 'core', '.vault-active'));
@@ -178,9 +179,10 @@ export function isVaultActive(repoRoot) {
 }
 
 // --- Shared lock --------------------------------------------------------
-// Same on-disk protocol as the retired PowerShell side (archive/lock.ps1,
-// unscheduled 2026-08-30, ADR 0033) — kept because two agent sessions, in
-// either runtime, can still run concurrently:
+// Same on-disk protocol as the reference instance's retired PowerShell
+// scheduler (its lock.ps1, unscheduled 2026-08-30, ADR 0033; never shipped
+// here) — kept because two agent sessions, in either runtime, can still run
+// concurrently:
 // scripts/.brain.lock holds a single line "<PID> <ISO-8601 UTC> <owner>".
 // A lock whose PID is dead, or that is older than 2h, is stale and gets
 // broken by the next acquirer.
@@ -256,9 +258,8 @@ export function enterBrainLock(repoRoot, owner, logTag) {
     }
 
     // 'wx' fails if the file exists, so the create itself is the race winner.
-    // This is stronger than archive/lock.ps1's write-then-reread, and
-    // compatible: the
-    // file format is identical.
+    // This is stronger than the old lock.ps1's write-then-reread, and
+    // compatible: the file format is identical.
     writeFileSync(lockPath, `${process.pid} ${new Date().toISOString()} ${owner}`, {
       encoding: 'utf8',
       flag: 'wx',
@@ -489,10 +490,11 @@ export function budgetUsage(repoRoot) {
 
 // --- delivery state -----------------------------------------------------
 // "Is anything on this branch still only on this machine?" — asked separately
-// from "did this invocation create a commit", because the two come apart. The
-// push debounce commits without pushing, so a session can end perfectly clean
-// while a real backlog sits on disk (observed 2026-09-05: the 20:58Z commit
-// was still local when the 21:05Z SessionEnd ran and found nothing to stage).
+// from "did this invocation create a commit", because the two come apart: a
+// session can end perfectly clean while a real backlog sits on disk. Task-owned
+// commits that are never pushed do exactly that, and so did the retired
+// checkpoint's push debounce (observed 2026-09-05: a commit was still local
+// when the next SessionEnd ran and found nothing to stage).
 //
 // ok:false means the question could not be answered — no upstream, detached
 // HEAD, git missing, remote unreachable. That is *unknown*, never "in sync":
@@ -521,7 +523,7 @@ function unpushedCommits(repoRoot) {
 // `git log --reverse --format=%cI -1 @{upstream}..HEAD` does not answer this,
 // which is the bug this replaces: git applies the -1 limit while walking the
 // history newest-first and reverses only what survived, so it returns the
-// NEWEST unpushed commit. Every new checkpoint therefore reset the reported
+// NEWEST unpushed commit. Every new commit therefore reset the reported
 // backlog age to zero, and a week-old unpushed commit read as "0d" forever.
 // Take the whole list and read its last line instead.
 function oldestUnpushedISO(repoRoot) {
@@ -544,8 +546,8 @@ function oldestUnpushedISO(repoRoot) {
 // The checkpoint commit that lived here (`git add -A` + commit + push on every
 // Stop/SessionEnd) was retired with ADR 0042/0044: with two runtimes able to
 // work in one checkout, a whole-tree commit takes another task's half-written
-// files with it. The pre-removal file is in this repo's `v1.0` tag. Commits
-// are task-owned now; the secret guard above is kept for reuse.
+// files with it. The pre-removal file is in the template repository's `v1.0`
+// tag. Commits are task-owned now; the secret guard above is kept for reuse.
 
 export function readFileSafe(p) {
   try {
@@ -763,8 +765,9 @@ function localDay(now) {
 // important, and backup failures are priority 0 so that a day whose budget is
 // otherwise full still delivers "your commits never left this machine".
 // A key already shown today is dropped rather than re-counted, so a warning
-// that persists across forty Stops costs one item, not forty — and the count
-// lives in the sidecar, so opening a second session does not reset it.
+// that persists across forty session starts costs one item, not forty — and
+// the count lives in the sidecar, so opening a second session does not reset
+// it.
 //
 // Everything refused is written to `logs/.automation.log`: suppressed is not
 // the same as unrecorded, and the diagnostics are where a requested inspection

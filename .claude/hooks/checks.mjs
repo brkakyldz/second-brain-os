@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Compiled lesson-checks (v3 Phase 3, ADR 0019 / ADR 0022). The TRACE move:
+// Compiled lesson-checks (ADR 0019 / ADR 0022). The TRACE move:
 // a mechanically checkable rule lives here as code, not as prose the model
 // may skip. Warn-first, never blocking, fail-open like everything else here.
 //
@@ -173,7 +173,7 @@ const noteConventions = {
 // So: the instrument. A note that changed this session and is not linked from
 // INDEX.md fires here (ADR 0035).
 //
-// Canary (P-029): a new `notes/zzz-canary.md` absent from INDEX.md must fire
+// Canary: a new `notes/zzz-canary.md` absent from INDEX.md must fire
 // `missing-from-index`; the same note with a `[[zzz-canary]]` row added must
 // not. Near-miss it must NOT fire on: a note whose name is a prefix of an
 // indexed one (`lesson-2026-08-26-style` vs `lesson-2026-08-26-style-2`) —

@@ -118,8 +118,8 @@ function getGitDir(repoRoot) {
 // throws. Returns { ok, skipped, warning }. On failure, checks for a
 // stuck/conflicted rebase and aborts it so the tree is never left mid-rebase.
 //
-// The lock matters here: every Claude Code session on this machine runs this
-// hook against the one vault repo, and two concurrent pulls both write
+// The lock matters here: every Claude Code and Codex session on this machine
+// runs this hook against the one vault repo, and two concurrent pulls both write
 // .git/FETCH_HEAD, leaving it with several for-merge entries - which is what
 // "fatal: Cannot rebase onto multiple branches" actually is. A skipped pull is
 // harmless: the job holding the lock is pulling the same repo right now.
@@ -281,12 +281,12 @@ function buildContext(repoRoot, pullResult, projectDir) {
   // file and injects only a ~2KB preview — an oversized payload silently
   // un-loads Tier 0. Outside the vault only USER + MEMORY are inlined
   // (IDENTITY and OPEN_QUESTIONS are vault-internal); inside, OPEN_QUESTIONS
-  // is a pointer and the log tail is dropped to stay under the threshold.
+  // is a pointer rather than inlined, to stay under the threshold.
   const coreFiles = isOutsideVault
     ? ['USER.md', 'MEMORY.md']
     : ['IDENTITY.md', 'USER.md', 'MEMORY.md'];
   // Each budgeted file is headed by its own usage, so the agent knows how much
-  // room it has left *before* it writes (ADR 0030). The session-end warning
+  // room it has left *before* it writes (ADR 0030). A warning after the write
   // arrives after the damage; this arrives before it. Fail-open (ADR 0004):
   // a meter that cannot be computed costs a label, never the payload.
   let usage = [];

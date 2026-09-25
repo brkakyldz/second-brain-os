@@ -34,7 +34,8 @@ retired.
 
 ## B4 — gitleaks pre-commit hook · **opt-in**
 
-`.pre-commit-config.yaml` declares `gitleaks` (pinned at `v8.18.4`). **Since
+`.pre-commit-config.yaml` declares `gitleaks` (pinned at `v8.30.1`;
+`pre-commit autoupdate` moves the pin). **Since
 v1.1 it is the only secret scan, and only once you install it:** the Node
 scanner in `.claude/hooks/lib.mjs` (`scanStagedForSecrets`) ran inside every
 checkpoint commit, and the checkpoint was retired with whole-tree commits (ADR

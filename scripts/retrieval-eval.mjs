@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // retrieval-eval.mjs — ranked lexical lookup plus recall@k over the frozen
-// `.claude/eval/golden-set.md` (A3).
+// `.claude/eval/golden-set.md`.
 //
 // The vault's most consequential frozen decision is "lexical search only"
 // (ADR 0018). This script is what makes that decision falsifiable instead of
@@ -60,8 +60,8 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
       '--query    return ranked notes/core candidates instead of running the',
       '           frozen evaluation. The default ranker is frequency-free.',
       '',
-      'Monthly cadence (the structural audit). Exits 0 always — a failing row',
-      'is a finding to read, not a build to break.',
+      'Run by hand or from /audit; nothing schedules it. Exits 0 always — a',
+      'failing row is a finding to read, not a build to break.',
     ].join('\n')
   );
   process.exit(0);

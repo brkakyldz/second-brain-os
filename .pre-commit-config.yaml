@@ -1,14 +1,17 @@
 # Optional defense-in-depth layer for anyone who has the `pre-commit`
 # framework (https://pre-commit.com) installed locally.
 #
-# Since v1.1 this is the ONLY secret scan, and only once installed. Until then
+# Since v1.1 this is the ONLY secret scan, and only once installed. Until v1.1
 # the Node scan in `.claude/hooks/lib.mjs` (`scanStagedForSecrets`) ran inside
 # every checkpoint commit; the checkpoint was retired when commits became
 # task-owned (ADR 0042, 0044), so nothing scans a commit unless this is enabled.
 #
-# To enable: `pip install pre-commit && pre-commit install` in this repo.
+# To enable, in this repo, as two commands (Windows PowerShell 5 has no `&&`):
+#   pip install pre-commit
+#   pre-commit install
+# `pre-commit autoupdate` moves the pin below to the newest gitleaks release.
 repos:
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.18.4
+    rev: v8.30.1
     hooks:
       - id: gitleaks

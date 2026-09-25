@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// link-sweep.mjs — B2: weekly broken-wikilink / orphan-note / dangling-pointer
-// sweep. Node stdlib only, no dependencies.
+// link-sweep.mjs — B2: broken-wikilink / orphan-note / dangling-pointer
+// sweep, run by hand or from a /curator session. Node stdlib only, no
+// dependencies.
 //
 // Scans every vault-content .md file (excluding runtime/config/resource trees)
 // for:
@@ -20,7 +21,7 @@
 //
 // Writes a report to logs/YYYY-MM-DD_link-sweep.md.
 //
-// Kill criterion (per the Phase B plan): orphan count flat for a month.
+// Kill criterion: orphan count flat for a month (scripts/README.md).
 
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
