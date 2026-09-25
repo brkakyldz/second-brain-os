@@ -290,7 +290,11 @@ for you, and nothing ever stages the whole tree:
 
     git add core/USER.md core/IDENTITY.md
     git commit -m "setup: personalize brain"
-
+${focus.length ? `
+Your current-focus lines link to project notes that do not exist yet. Create
+each from .claude/templates/project.md with a row in INDEX.md (or ask your
+agent to) — until then \`node scripts/link-sweep.mjs\` reports them as broken.
+` : ''}
 Next, optional but recommended — GLOBAL MODE
 --------------------------------------------
 By default the hook fires only inside this folder, and only in Claude Code.

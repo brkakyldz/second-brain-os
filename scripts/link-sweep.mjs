@@ -381,7 +381,7 @@ lines.push('');
 lines.push('## Orphan notes');
 lines.push('');
 lines.push(
-  '(no inbound and no outbound resolved wikilinks; excludes episodic, archived, personal, and structural files)'
+  '(no inbound and no outbound resolved wikilinks; excludes episodic, archived, source, always-loaded and documentation files)'
 );
 lines.push('');
 if (orphans.length === 0) {
