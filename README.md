@@ -177,9 +177,10 @@ the reuse telemetry and the proposals sweep. After pulling:
   data; your vault will hold your actual notes and should never be public.
 - **Secret scanning is opt-in since v1.1.** The Node scanner used to run inside
   every hook-made commit; with no hook committing, it has nothing to run in.
-  Install the independent one: `pip install pre-commit && pre-commit install`
-  wires [gitleaks](https://github.com/gitleaks/gitleaks) into every commit via
-  `.pre-commit-config.yaml`. On GitHub, also turn on secret-scanning push
+  Install the independent one: `pip install pre-commit`, then
+  `pre-commit install` inside the vault (two commands — Windows PowerShell 5
+  has no `&&`) wires [gitleaks](https://github.com/gitleaks/gitleaks) into
+  every commit via `.pre-commit-config.yaml`. On GitHub, also turn on secret-scanning push
   protection for your vault repo.
 - **Nothing is deleted automatically.** Stale or closed content moves to
   `archive/`. The curator can *propose* a deletion in two narrow cases; it never

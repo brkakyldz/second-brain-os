@@ -250,9 +250,9 @@ Tell your user, concretely:
   wrong is the most useful thing that will happen this week, and it only
   becomes an enforced check if it is captured.
 - `node scripts/brain-doctor.mjs` whenever something feels off.
-- **Secret scanning is opt-in.** Recommend `pip install pre-commit && pre-commit
-  install` in the vault (wires gitleaks into every commit) and GitHub's
-  secret-scanning push protection on the repo.
+- **Secret scanning is opt-in.** Recommend `pip install pre-commit`, then
+  `pre-commit install` in the vault (wires gitleaks into every commit), and
+  GitHub's secret-scanning push protection on the repo.
 - That `core/OPEN_QUESTIONS.md` is a routing table for open questions, empty and
   waiting for real ones.
 - That nothing runs on a schedule, on purpose, and nothing nags about an

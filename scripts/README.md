@@ -38,8 +38,8 @@ retired.
 v1.1 it is the only secret scan, and only once you install it:** the Node
 scanner in `.claude/hooks/lib.mjs` (`scanStagedForSecrets`) ran inside every
 checkpoint commit, and the checkpoint was retired with whole-tree commits (ADR
-0042, 0044). Nothing scans a commit unless you enable this:
-`pip install pre-commit && pre-commit install`.
+0042, 0044). Nothing scans a commit unless you enable this: `pip install
+pre-commit`, then `pre-commit install` inside the vault.
 
 - **Recommended, by hand:** turn on GitHub's secret-scanning **push
   protection** for your vault repo (Settings → Code security). It is a repo
