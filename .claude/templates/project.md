@@ -30,7 +30,7 @@ related: []
 
 ## What it taught
 
-- <links to lessons and knowledge notes this project produced, e.g. [[...]]>
+- <wikilinks to the lessons and knowledge notes this project produced>
 
 ## Lineage
 
