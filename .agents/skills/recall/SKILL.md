@@ -1,6 +1,6 @@
 ---
 name: recall
-description: Four-layer lexical retrieval over the vault — search conventions plus a logged retrieval-failure signal when the vault misses.
+description: Four-layer lexical retrieval over the brain from any repo — search conventions plus a logged retrieval-failure signal when the brain misses. Use when a question may already be answered in the brain.
 ---
 
 # Recall
@@ -8,17 +8,34 @@ description: Four-layer lexical retrieval over the vault — search conventions 
 No search index — grep + wikilinks, by design (ADR 0018). Four layers, each
 tried before escalating.
 
+## Always the brain
+
+This skill searches the brain from whatever repo the session is in, and every
+write it makes — an alias, a signal line, a golden-set row — lands in the
+brain, never in the current project. Paths below are written `<brain>/…`; the
+scripts resolve the brain from their own location, so they run from any
+working directory. Resolve `<brain>` once:
+
+1. The session is in the brain itself (its root has `core/MEMORY.md` and
+   `.claude/hooks/session-start.mjs`) → that root.
+2. The SessionStart context says "The brain lives at `<path>`." (global
+   mode) → that path.
+3. `BRAIN_DIR` is set in the environment → that path.
+4. This skill was loaded through a user-level link → the real path of this
+   skill's folder, three levels up (`<brain>/.agents/skills/recall`).
+5. None of these → ask the owner. Never guess a path.
+
 ## Layers
 
 1. **Tier 0 — what is actually in context.** Inside the vault: `IDENTITY.md`,
    `USER.md`, `MEMORY.md`, injected by the SessionStart hook. In any other
-   project: `USER.md` and `MEMORY.md` only. `core/OPEN_QUESTIONS.md` is
+   project: `USER.md` and `MEMORY.md` only. `<brain>/core/OPEN_QUESTIONS.md` is
    **never inlined** — the hook injects a pointer to it, so reading it is a
    tool call like any other file. Check what is in context first; open the
    questions ledger when the query is about live questions or vault planning.
 
 2. **Rank `notes/` + `core/` first**, then use `rg` over `logs/`. Run
-   `node scripts/retrieval-eval.mjs --query "<the user's query>"`; it ranks by
+   `node <brain>/scripts/retrieval-eval.mjs --query "<the user's query>"`; it ranks by
    unique normalized query-token overlap, so a long report does not win merely
    by repeating a term. Open only the two or three plausible hits. If the
    ranked lookup returns nothing useful, search titles, `aliases:`, `tags:` and
@@ -27,7 +44,7 @@ tried before escalating.
    lexical index only matches the token it was given.
 
 3. **Wikilink/backlink hops (1–2)** from any hit — `rg` for `[[hit-name]]`
-   across the vault to find what links to or from it.
+   across `<brain>` to find what links to or from it.
 
 4. **Frontmatter filters** — narrow by `type:`, `status:`, `created:` to cut
    noise once you have candidates.
@@ -37,7 +54,7 @@ tried before escalating.
 - **The vault had it and search missed it** (later confirmed in-vault, or a
   query that clearly should have hit): log it **with a cause** —
   ```
-  node .claude/hooks/append-signal.mjs retrieval-failure query:"<the query>" cause:paraphrase-miss
+  node <brain>/.claude/hooks/append-signal.mjs retrieval-failure query:"<the query>" cause:paraphrase-miss
   ```
   This ledger is the *only* thing that can ever justify a search index (ADR
   0018) — log every real miss, not just the memorable ones.
@@ -61,9 +78,14 @@ tried before escalating.
   `notes/` isn't protected, so this direct edit is allowed — just mention it
   in one line to the owner ("added alias X to notes/Y.md").
 
+- **Outside a brain session**, a write above is committed in the brain by
+  explicit path (`git -C <brain> add -- <path>`, then
+  `git -C <brain> commit -m "<what>" -- <path>`), after checking
+  `git -C <brain> diff -- <path>` shows only your change. Never push.
+
 ## Golden set
 
-`.claude/eval/golden-set.md` holds `query → expected note` pairs;
-`node scripts/retrieval-eval.mjs` re-runs them and reports recall@k. Add a row
+`<brain>/.claude/eval/golden-set.md` holds `query → expected note` pairs;
+`node <brain>/scripts/retrieval-eval.mjs` re-runs them and reports recall@k. Add a row
 whenever a real lookup teaches you a query shape worth defending — especially
 right after a miss you just fixed with an alias, so the fix stays fixed.

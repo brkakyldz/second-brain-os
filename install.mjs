@@ -19,10 +19,21 @@
 // machine, a moved folder (a Windows junction stores an absolute path), or a
 // clone upgraded from v1.0, where the skills still lived in .claude/skills.
 //
+// `node install.mjs --link-global-skills` is a separate, opt-in step: it links
+// /closeout, /lesson and /recall into the user-level skills folder of each
+// runtime whose home exists (~/.claude/skills, ~/.codex/skills, or
+// CLAUDE_CONFIG_DIR / CODEX_HOME), so a session in any project can reach them
+// (ADR 0045). It creates only links that point back into this vault, never
+// replaces anything but a broken link, and `--unlink-global-skills` removes
+// exactly those links again. That is why it may touch user-level folders when
+// step 6 may not: you ask for it by name, it changes nothing but its own
+// links, and it reverses cleanly — a settings file merge is none of those.
+//
 // Safe to abort at any prompt (Ctrl-C) — nothing is written until the summary
 // is confirmed.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
@@ -40,6 +51,37 @@ function samePath(a, b) {
   return process.platform === 'win32' || process.platform === 'darwin'
     ? norm(a).toLowerCase() === norm(b).toLowerCase()
     : norm(a) === norm(b);
+}
+
+// The skills a project session needs from the brain (ADR 0045). Everything
+// else in .agents/skills works on the vault itself and stays vault-scoped.
+const GLOBAL_SKILLS = ['closeout', 'lesson', 'recall'];
+
+function userSkillDirs() {
+  const home = os.homedir();
+  return [
+    { runtime: 'Claude Code', home: process.env.CLAUDE_CONFIG_DIR?.trim() || path.join(home, '.claude') },
+    { runtime: 'Codex', home: process.env.CODEX_HOME?.trim() || path.join(home, '.codex') },
+  ].map((r) => ({ ...r, dir: path.join(r.home, 'skills') }));
+}
+
+function makeDirLink(target, link) {
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  if (process.platform === 'win32') {
+    // A junction needs no admin rights or Developer Mode; a symlink does.
+    fs.symlinkSync(target, link, 'junction');
+  } else {
+    fs.symlinkSync(path.relative(path.dirname(link), target), link, 'dir');
+  }
+}
+
+// Where a link points, whether or not the target still exists.
+function linkTarget(link) {
+  try {
+    return path.resolve(path.dirname(link), fs.readlinkSync(link));
+  } catch {
+    return null;
+  }
 }
 
 // Creates or repairs the .claude/skills link. Never deletes anything that is
@@ -82,23 +124,111 @@ function linkSkills() {
     }
   }
   try {
-    fs.mkdirSync(path.dirname(SKILLS_LINK), { recursive: true });
-    if (process.platform === 'win32') {
-      // A junction needs no admin rights or Developer Mode; a symlink does.
-      fs.symlinkSync(SKILLS_TARGET, SKILLS_LINK, 'junction');
-    } else {
-      fs.symlinkSync(path.relative(path.dirname(SKILLS_LINK), SKILLS_TARGET), SKILLS_LINK, 'dir');
-    }
+    makeDirLink(SKILLS_TARGET, SKILLS_LINK);
     return { ok: true, note: st ? 'repaired' : 'created' };
   } catch (err) {
     return { ok: false, note: err.message };
   }
 }
 
+// One user-level link per skill per runtime. The only thing it replaces is a
+// broken link (a moved vault leaves one behind); a real folder, or a link that
+// resolves somewhere else, is someone's own setup and is reported instead.
+function linkGlobalSkill(dir, name) {
+  const target = path.join(SKILLS_TARGET, name);
+  const link = path.join(dir, name);
+  if (!fs.existsSync(path.join(target, 'SKILL.md'))) {
+    return { ok: false, note: `.agents/skills/${name} is missing` };
+  }
+  let st = null;
+  try {
+    st = fs.lstatSync(link);
+  } catch {
+    st = null;
+  }
+  if (st && !st.isSymbolicLink()) {
+    return { ok: false, note: 'a real folder is already there — left alone' };
+  }
+  if (st) {
+    let real = null;
+    try {
+      real = fs.realpathSync(link);
+    } catch {
+      real = null; // broken link
+    }
+    if (real && samePath(real, fs.realpathSync(target))) return { ok: true, note: 'already linked' };
+    if (real) {
+      return { ok: false, note: `already links to ${real} — left alone; remove that link yourself to switch` };
+    }
+    try {
+      fs.rmSync(link, { recursive: false, force: true }); // the dead link only
+    } catch (err) {
+      return { ok: false, note: `could not replace the broken link: ${err.message}` };
+    }
+  }
+  try {
+    makeDirLink(target, link);
+    return { ok: true, note: st ? 'repaired' : 'linked' };
+  } catch (err) {
+    return { ok: false, note: err.message };
+  }
+}
+
+// Removes only links that point into this vault's .agents/skills — anything
+// else in the user-level folder is not this installer's to touch.
+function unlinkGlobalSkill(dir, name) {
+  const link = path.join(dir, name);
+  let st = null;
+  try {
+    st = fs.lstatSync(link);
+  } catch {
+    return { ok: true, note: 'not linked' };
+  }
+  if (!st.isSymbolicLink()) return { ok: true, note: 'a real folder, not a link from here — left alone' };
+  const to = linkTarget(link);
+  const ours = path.join(SKILLS_TARGET, name);
+  let real = null;
+  try {
+    real = fs.realpathSync(link);
+  } catch {
+    real = null; // broken — only the recorded target can prove it is ours
+  }
+  const isOurs = (to && samePath(to, ours)) || (real && fs.existsSync(ours) && samePath(real, fs.realpathSync(ours)));
+  if (!isOurs) {
+    return { ok: true, note: `links to ${to ?? 'an unreadable target'}, not this vault — left alone` };
+  }
+  try {
+    fs.rmSync(link, { recursive: false, force: true }); // the link, never its target
+    return { ok: true, note: 'removed' };
+  } catch (err) {
+    return { ok: false, note: err.message };
+  }
+}
+
+function globalSkills(remove) {
+  let ok = true;
+  for (const { runtime, home, dir } of userSkillDirs()) {
+    if (!fs.existsSync(home)) {
+      stdout.write(`${runtime}: ${home} not found — skipped\n`);
+      continue;
+    }
+    for (const name of GLOBAL_SKILLS) {
+      const r = remove ? unlinkGlobalSkill(dir, name) : linkGlobalSkill(dir, name);
+      if (!r.ok) ok = false;
+      stdout.write(`${runtime}: ${path.join(dir, name)} — ${r.ok ? r.note : `FAILED: ${r.note}`}\n`);
+    }
+  }
+  return ok;
+}
+
 if (process.argv.includes('--link-skills')) {
   const r = linkSkills();
   stdout.write(`.claude/skills -> .agents/skills: ${r.ok ? r.note : `FAILED — ${r.note}`}\n`);
   process.exit(r.ok ? 0 : 1);
+}
+
+if (process.argv.includes('--link-global-skills') || process.argv.includes('--unlink-global-skills')) {
+  process.exit(globalSkills(process.argv.includes('--unlink-global-skills')) ? 0 : 1);
 }
 
 const rl = readline.createInterface({ input: stdin, output: stdout });
@@ -318,6 +448,13 @@ ${indent(codexBlock)}
 
 The scripts resolve the brain root themselves (their own location, or BRAIN_DIR
 if you set it), so they are correct from any working directory.
+
+In global mode a project session is told to end its work with /closeout: the
+project's state stays in its own repo and the brain gets a short log. To make
+/closeout, /lesson and /recall loadable in every project, link them at user
+level — opt-in, and undone by --unlink-global-skills:
+
+    node install.mjs --link-global-skills
 
 Trade-off, stated plainly: every session on the machine then pays a small
 \`git pull\` at start (skipped whenever the vault has uncommitted changes).

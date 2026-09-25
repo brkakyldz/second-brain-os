@@ -30,7 +30,8 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
     '',
     'Read-only checks: Claude Code and Codex hook topology (exactly one',
     'SessionStart per runtime, no retired git-writing hook), the .claude/skills',
-    'link, Tier-0 budgets, recent SessionStart evidence, recall resource paths,',
+    'link, the user-level closeout/lesson/recall links in global mode, Tier-0',
+    'budgets, recent SessionStart evidence, recall resource paths,',
     'retrieval score, top-level entries against the folder map, and Git',
     'delivery state.',
     '--strict exits 1 when any check fails; warnings do not fail it.',
@@ -183,6 +184,39 @@ if (!existsSync(skillsTarget)) {
   } else {
     add(results, 'Skills link', 'FAIL', `.claude/skills points at ${real ?? 'nothing (broken link)'} — run \`node install.mjs --link-skills\``);
   }
+}
+
+// --- Global mode tells every project session to end with /closeout (ADR
+// 0045); the rule is hollow if the skill cannot load there. Only a runtime
+// that is actually in global mode is checked — project scope never leaves the
+// vault, where .agents/skills already has all three.
+const GLOBAL_SKILLS = ['closeout', 'lesson', 'recall'];
+const globalRuntimes = [
+  claudeStarts.includes('global') && { runtime: 'Claude Code', dir: path.join(claudeRoot, 'skills') },
+  codexGlobalStarts.length > 0 && { runtime: 'Codex', dir: path.join(codexRoot, 'skills') },
+].filter(Boolean);
+if (globalRuntimes.length > 0) {
+  const unlinked = [];
+  for (const { runtime, dir } of globalRuntimes) {
+    for (const name of GLOBAL_SKILLS) {
+      const ours = path.join(skillsTarget, name);
+      let real = null;
+      try {
+        real = realpathSync(path.join(dir, name));
+      } catch {
+        real = null;
+      }
+      if (!real || !existsSync(ours) || norm(real) !== norm(realpathSync(ours))) unlinked.push(`${runtime} ${name}`);
+    }
+  }
+  add(
+    results,
+    'Global skills',
+    unlinked.length ? 'WARN' : 'PASS',
+    unlinked.length
+      ? `global mode is on, but these do not load this vault's skill in project sessions: ${unlinked.join(', ')} — run \`node install.mjs --link-global-skills\``
+      : `closeout, lesson and recall linked at user level for ${globalRuntimes.map((r) => r.runtime).join(' and ')}`
+  );
 }
 
 // Tier-0 delivery can fail silently once the payload grows; budgets are the
