@@ -39,6 +39,11 @@ scripts/.brain.lock
 scripts/.last-rollup
 scripts/.last-push
 
+# the Claude-side view of the one skills copy in .agents/skills/ — a directory
+# junction (Windows) or symlink (macOS/Linux) created by `node install.mjs`,
+# never a copy and never tracked: it is machine state (ADR 0044)
+.claude/skills
+
 # the marker that switches the hooks on — created by setup, per clone, and
 # deliberately never committed, so a fresh clone stays inert until it has been
 # personalized (ADR 0014)

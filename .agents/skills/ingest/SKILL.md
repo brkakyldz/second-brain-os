@@ -10,7 +10,7 @@ after that the vault answers from the distillation, not by re-reading. That is
 the whole economics of the thing — the cross-references, the contradictions and
 the synthesis are compiled at ingest time instead of re-derived per question.
 
-Contracts this obeys: `raw/README.md` (sources are immutable), `CLAUDE.md`
+Contracts this obeys: `raw/README.md` (sources are immutable), `AGENTS.md`
 § Distillation and § Memory rules, ADR 0035, ADR 0012 (untrusted-source veto).
 
 ## Trigger

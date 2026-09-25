@@ -54,7 +54,7 @@ Capture is mechanical, not analytical:
    ```
 
 5. **Add one outbound wikilink** only if an obviously-related note already
-   exists (every note needs >=1 link per `CLAUDE.md`) — link to the related
+   exists (every note needs >=1 link per `AGENTS.md`) — link to the related
    note itself, never to an interpretation of the mistake. Skip this step
    rather than force a link.
 

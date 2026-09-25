@@ -4,8 +4,8 @@
 [kepano/obsidian-skills](https://github.com/kepano/obsidian-skills)
 at commit `a1dc48e6` (2026-06-08), under the MIT license below.
 
-`curator/` and `triage/` are original to this repository and are covered by the
-root `LICENSE`.
+Every other skill in this folder is original to this repository and is
+covered by the root `LICENSE`.
 
 ---
 

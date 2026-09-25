@@ -119,7 +119,7 @@ unsourced beliefs poisons every session after it.
    hand-kept list in
    `PROPOSALS.md`, which nothing writes automatically.
 
-   Cap what surfaces proactively at three items — the CLAUDE.md notification
+   Cap what surfaces proactively at three items — the AGENTS.md notification
    budget is three a day across every surface, and this pass is one of them.
 
 10. **Commit without stealing another task's work.** Stage only the explicit

@@ -4,13 +4,13 @@ created: 2026-09-02
 tags: [lifecycle, curation, memory]
 status: active
 aliases: [corroboration gate, archiving rules, contradictions, pinning, staleness]
-description: What happens to a note or a fact, with rationale — tiers, distillation, maturity, staleness, archive-vs-delete, consolidation and anti-poisoning. How the system changes itself is self-evolution-policy; binding rules live in CLAUDE.md.
+description: What happens to a note or a fact, with rationale — tiers, distillation, maturity, staleness, archive-vs-delete, consolidation and anti-poisoning. How the system changes itself is self-evolution-policy; binding rules live in AGENTS.md.
 related: ["[[MEMORY]]", "[[self-evolution-policy]]"]
 ---
 
 # Lifecycle Policy
 
-Binding rules live in `CLAUDE.md`; this playbook holds the *why*. **Scope: what
+Binding rules live in `AGENTS.md`; this playbook holds the *why*. **Scope: what
 happens to a note or a fact.** How the *system* changes itself — the
 maintenance loop, growth control, the noise budget — is
 [[self-evolution-policy]]; the machine they run on is `docs/ARCHITECTURE.md`.
@@ -125,11 +125,11 @@ never comes. One rule is load-bearing:
   `confidence: low` and reaches `MEMORY.md` only on a **second independent
   source** — independence being a property of the source, not a count of
   sessions. Re-reading one summary is one observation seen twice (ADR 0038).
-- Protected files: `IDENTITY.md` and `CLAUDE.md` are never edited by an
+- Protected files: `IDENTITY.md` and `AGENTS.md` are never edited by an
   automated pass — agents propose a diff, the owner applies it. **A
   convention, not a security boundary**: the clients carry no path deny-rule
   for either, and a shell command writes any file whatever the Write/Edit
-  permissions say. It holds because the agent follows `CLAUDE.md`.
+  permissions say. It holds because the agent follows `AGENTS.md`.
 - Pinning: `pinned: true` exempts a fact from demotion, capped at 10
   vault-wide. The quarterly re-justification went with the calendar (ADR
   0033); the cap stays in case pins start being used.

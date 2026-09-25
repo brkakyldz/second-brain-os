@@ -41,7 +41,7 @@ const EXCLUDE_FROM_SCAN = new Set([
 // Walked and indexed as link *targets*, but never scanned as link *sources*.
 // `archive/` used to sit in EXCLUDE_FROM_SCAN, which conflated the two: an
 // archived note stopped being a resolvable destination, so every link into it
-// was reported broken. That is precisely the promise CLAUDE.md makes and this
+// was reported broken. That is precisely the promise AGENTS.md makes and this
 // sweep exists to verify — "a link never breaks because a thought grew up" —
 // and it made B2's report almost entirely false positives (54 of 54 on
 // 2026-08-27). Archived notes are still not scanned for broken links of their
@@ -62,7 +62,7 @@ const TARGET_ONLY_DIRS = new Set(['archive', 'raw']);
 // `docs/` and the root repo docs are documentation *about* the vault rather
 // than pages in it; they are read from the repo, not reached by wikilink.
 const EXCLUDE_FROM_ORPHAN_REPORT = ['logs', 'archive', 'raw', 'core', 'docs', 'scripts'];
-const ORPHAN_EXEMPT_FILES = new Set(['README.md', 'SETUP.md', 'CLAUDE.md', 'CLAUDE.md']);
+const ORPHAN_EXEMPT_FILES = new Set(['README.md', 'SETUP.md', 'AGENTS.md', 'CLAUDE.md']);
 
 function toPosix(p) {
   return p.split(path.sep).join('/');
@@ -132,7 +132,7 @@ function parseFrontmatter(content) {
 const WIKILINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g;
 
 // Strip fenced code blocks, inline code spans, and HTML comments before
-// looking for wikilinks: this vault's own docs (CLAUDE.md, OPEN_QUESTIONS.md,
+// looking for wikilinks: this vault's own docs (AGENTS.md, OPEN_QUESTIONS.md,
 // this repo's scripts/README.md, MEMORY.md's format comment) illustrate the
 // `[[wikilink]]` syntax itself inside backticks/comments — those are prose
 // examples, not real links, and would otherwise show up as false "broken
@@ -331,7 +331,7 @@ lines.push('');
 // one. Report them; the fix is always to rename one file.
 // `README.md` is a folder convention, one per directory, and nobody writes
 // `[[readme]]`. Reporting it every run would be a permanent false positive,
-// and a section that is always noisy stops being read (CLAUDE.md, notification
+// and a section that is always noisy stops being read (AGENTS.md, notification
 // budget).
 const DUPLICATE_BASENAME_EXEMPT = new Set(['readme']);
 const duplicateBasenames = [];

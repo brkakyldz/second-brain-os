@@ -21,7 +21,7 @@ note (losing the fidelity that made it worth keeping) or is lost.
   vault makes. Nothing here is loaded at session start, promoted to
   `MEMORY.md`, or treated as true because it is present. Facts derived from it
   carry a `source:` marker and go through the corroboration gate like any other
-  untrusted external content (`CLAUDE.md` § Memory rules).
+  untrusted external content (`AGENTS.md` § Memory rules).
 - **Full is healthy.** This is a corpus, not a queue. It is never emptied and a
   file is never deleted after being read — the note links back to it forever.
 

@@ -9,7 +9,7 @@ A comparison, an analysis, a connection worked out in conversation is worth
 what an ingested source is worth — and by default it evaporates when the
 session ends. This files it into `notes/` as a page under the ordinary rules.
 
-Contracts: `CLAUDE.md` § Distillation and § Note conventions, ADR 0035, and the
+Contracts: `AGENTS.md` § Distillation and § Note conventions, ADR 0035, and the
 ADR 0012 boundary spelled out below.
 
 ## Trigger — the owner's explicit request only

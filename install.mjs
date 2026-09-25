@@ -5,12 +5,19 @@
 //   1. asks a short interview,
 //   2. writes core/USER.md and the language line in core/IDENTITY.md,
 //   3. creates core/.vault-active — the marker every hook is gated on,
-//   4. turns on git rerere,
-//   5. prints the global-mode block for you to paste, and does NOT write it.
+//   4. links .claude/skills to .agents/skills, the one skills copy both
+//      runtimes load (a junction on Windows, a symlink elsewhere — ADR 0044),
+//   5. turns on git rerere,
+//   6. prints the global-mode wiring for Claude Code and Codex for you to
+//      paste, and does NOT write it.
 //
-// Step 5 is deliberate: user-level settings are outside this repo, they affect
+// Step 6 is deliberate: user-level settings are outside this repo, they affect
 // every project on the machine, and an installer that edits them without you
 // watching is exactly the kind of thing this system's rules forbid.
+//
+// `node install.mjs --link-skills` does step 4 alone and exits — for a second
+// machine, a moved folder (a Windows junction stores an absolute path), or a
+// clone upgraded from v1.0, where the skills still lived in .claude/skills.
 //
 // Safe to abort at any prompt (Ctrl-C) — nothing is written until the summary
 // is confirmed.
@@ -25,6 +32,74 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const CORE = path.join(ROOT, 'core');
 const MARKER = path.join(CORE, '.vault-active');
+const SKILLS_TARGET = path.join(ROOT, '.agents', 'skills');
+const SKILLS_LINK = path.join(ROOT, '.claude', 'skills');
+
+function samePath(a, b) {
+  const norm = (p) => path.resolve(p).replace(/[\\/]+$/, '');
+  return process.platform === 'win32' || process.platform === 'darwin'
+    ? norm(a).toLowerCase() === norm(b).toLowerCase()
+    : norm(a) === norm(b);
+}
+
+// Creates or repairs the .claude/skills link. Never deletes anything that is
+// not itself a link: a real directory there is a copy, and a copy is the drift
+// this layout exists to prevent — so it is reported, not overwritten.
+function linkSkills() {
+  if (!fs.existsSync(SKILLS_TARGET)) {
+    return { ok: false, note: '.agents/skills/ is missing — is this a Second Brain OS clone?' };
+  }
+  let st = null;
+  try {
+    st = fs.lstatSync(SKILLS_LINK);
+  } catch {
+    st = null;
+  }
+  if (st && !st.isSymbolicLink()) {
+    return {
+      ok: false,
+      note:
+        '.claude/skills exists as a real directory, not a link. Move it aside ' +
+        '(anything in it that is not already in .agents/skills/ belongs there) ' +
+        'and re-run `node install.mjs --link-skills`.',
+    };
+  }
+  if (st) {
+    let real = null;
+    try {
+      real = fs.realpathSync(SKILLS_LINK);
+    } catch {
+      real = null; // broken link, e.g. the vault folder was moved
+    }
+    if (real && samePath(real, fs.realpathSync(SKILLS_TARGET))) {
+      return { ok: true, note: 'already linked' };
+    }
+    try {
+      // Removes the link itself, never what it points at.
+      fs.rmSync(SKILLS_LINK, { recursive: false, force: true });
+    } catch (err) {
+      return { ok: false, note: `could not replace the stale link: ${err.message}` };
+    }
+  }
+  try {
+    fs.mkdirSync(path.dirname(SKILLS_LINK), { recursive: true });
+    if (process.platform === 'win32') {
+      // A junction needs no admin rights or Developer Mode; a symlink does.
+      fs.symlinkSync(SKILLS_TARGET, SKILLS_LINK, 'junction');
+    } else {
+      fs.symlinkSync(path.relative(path.dirname(SKILLS_LINK), SKILLS_TARGET), SKILLS_LINK, 'dir');
+    }
+    return { ok: true, note: st ? 'repaired' : 'created' };
+  } catch (err) {
+    return { ok: false, note: err.message };
+  }
+}
+
+if (process.argv.includes('--link-skills')) {
+  const r = linkSkills();
+  stdout.write(`.claude/skills -> .agents/skills: ${r.ok ? r.note : `FAILED — ${r.note}`}\n`);
+  process.exit(r.ok ? 0 : 1);
+}
 
 const rl = readline.createInterface({ input: stdin, output: stdout });
 
@@ -76,7 +151,9 @@ if (fs.existsSync(MARKER)) {
       'Re-run setup and overwrite core/USER.md? [y/N] ',
     'n',
   );
-  if (!/^y(es)?$/i.test(again)) bail('Nothing changed.');
+  if (!/^y(es)?$/i.test(again)) {
+    bail('Nothing changed. (To repair only the skills link: node install.mjs --link-skills)');
+  }
 }
 
 stdout.write(`
@@ -144,6 +221,7 @@ About to write:
   core/USER.md          (${userMd.length} chars)
   core/IDENTITY.md      (language line only)
   core/.vault-active    (switches the hooks on)
+  .claude/skills        (link to .agents/skills — the one skills copy)
   git config rerere.enabled true
 
 `);
@@ -164,11 +242,14 @@ if (fs.existsSync(idPath)) {
 fs.writeFileSync(
   MARKER,
   `# This file switches the hooks on. It is gitignored on purpose: a fresh
-# clone of the template must never auto-commit or auto-push over your head.
+# clone of the template must never inject context or pull over your head.
 # Created ${today} by install.mjs.
 `,
   'utf8',
 );
+
+const link = linkSkills();
+stdout.write(`  .claude/skills -> .agents/skills: ${link.ok ? link.note : `FAILED — ${link.note}`}\n`);
 
 try {
   execFileSync('git', ['config', 'rerere.enabled', 'true'], { cwd: ROOT, stdio: 'ignore' });
@@ -177,43 +258,70 @@ try {
 }
 
 const abs = ROOT.replace(/\\/g, '/');
-const hookLines = [
-  ['SessionStart', 'session-start.mjs'],
-  ['PostToolUse (Read|Grep|Glob)', 'reuse-telemetry.mjs'],
-  ['Stop', 'checkpoint.mjs'],
-  ['PreCompact', 'checkpoint.mjs'],
-  ['SessionEnd', 'session-end.mjs'],
-].map(([evt, script]) => `    ${evt.padEnd(30)} node "${abs}/.claude/hooks/${script}"`);
+const claudeBlock = JSON.stringify(
+  {
+    hooks: {
+      SessionStart: [
+        { hooks: [{ type: 'command', command: `node "${abs}/.claude/hooks/session-start.mjs"`, timeout: 60 }] },
+      ],
+    },
+  },
+  null,
+  2,
+);
+const codexBlock = JSON.stringify(
+  {
+    hooks: {
+      SessionStart: [
+        { hooks: [{ type: 'command', command: `node "${abs}/.codex/hooks/session-start.mjs"`, timeout: 60 }] },
+      ],
+    },
+  },
+  null,
+  2,
+);
+const indent = (s) => s.split('\n').map((l) => `    ${l}`).join('\n');
 
 stdout.write(`
 Done. Your brain is live in this folder.
 
+Commit the personalization yourself, with explicit paths — nothing here commits
+for you, and nothing ever stages the whole tree:
+
+    git add core/USER.md core/IDENTITY.md
+    git commit -m "setup: personalize brain"
+
 Next, optional but recommended — GLOBAL MODE
 --------------------------------------------
-By default the hooks fire only inside this folder. Global mode makes the brain
-load and record in *every* Claude Code session on this machine, which is the
-way this system is meant to run: it grows from everything you work on, not just
-from the sessions you remember to start here.
+By default the hook fires only inside this folder, and only in Claude Code.
+Global mode makes the brain load in *every* session on this machine, which is
+the way this system is meant to run: it grows from everything you work on.
 
-To switch, move the "hooks" block out of this repo's .claude/settings.json and
-into your user-level ~/.claude/settings.json, with absolute paths:
+There is exactly one hook per runtime: SessionStart. Nothing commits at Stop,
+SessionEnd or PreCompact — commits are made by the task that wrote the files.
 
-${hookLines.join('\n')}
+Claude Code — merge into ~/.claude/settings.json (append to any existing
+"hooks" arrays, never replace them), then empty the "hooks" block in this
+repo's .claude/settings.json, or the hook fires twice inside the vault:
 
-That is five entries, not four. The PostToolUse one is the entire input side of
-the note-reuse metric — skip it and that number reads zero forever, which looks
-like a vault nobody uses rather than a hook nobody wired.
+${indent(claudeBlock)}
 
-Leave this repo's own "hooks" block empty when you do, or they fire twice.
+Codex — merge into ~/.codex/hooks.json the same way, then re-trust the changed
+hook definition in Codex. Do not also add it to a project-level
+.codex/hooks.json: Codex adds the layers together, so it would fire twice.
+
+${indent(codexBlock)}
 
 The scripts resolve the brain root themselves (their own location, or BRAIN_DIR
 if you set it), so they are correct from any working directory.
 
-Trade-off, stated plainly: every session on the machine then pays a small pull
-at start and a commit at each Stop.
+Trade-off, stated plainly: every session on the machine then pays a small
+\`git pull\` at start (skipped whenever the vault has uncommitted changes).
 
-Now open this folder as an Obsidian vault (optional), run \`claude\` in it, and
-say hello — CLAUDE.md and core/ load automatically.
+Check the wiring any time with:  node scripts/brain-doctor.mjs
+
+Now open this folder as an Obsidian vault (optional), start \`claude\` or
+\`codex\` in it, and say hello — AGENTS.md and core/ load automatically.
 `);
 
 rl.close();

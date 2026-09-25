@@ -56,7 +56,7 @@ open without opening it.
 
 | Page | What it is | Status |
 |---|---|---|
-| [[lifecycle-policy]] | What happens to a note or a fact, with rationale; binding rules live in `CLAUDE.md` | active |
+| [[lifecycle-policy]] | What happens to a note or a fact, with rationale; binding rules live in `AGENTS.md` | active |
 | [[self-evolution-policy]] | How the vault changes itself — the maintenance loop, growth control, the noise budget | active |
 
 ## Lessons — corrections, captured verbatim

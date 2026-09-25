@@ -17,7 +17,7 @@
 // fires within the month stay silent so a stuck violation cannot flood
 // the ledger or the session banner.
 //
-// The seed checks compile conventions already standing in CLAUDE.md
+// The seed checks compile conventions already standing in AGENTS.md
 // (ADR 0022): they are corroborated-by-adoption, not derived from lessons.
 // The third seed check, `inbox-48h`, was deleted with `inbox/` itself on
 // 2026-08-31 (ADR 0034) — a check enforcing a rule that no longer exists.
@@ -100,7 +100,7 @@ function parseFrontmatter(text) {
 const wikilinkShortForm = {
   id: 'wikilink-short-form',
   added: '2026-08-25',
-  source: 'CLAUDE.md § Note conventions (seed, ADR 0022)',
+  source: 'AGENTS.md § Note conventions (seed, ADR 0022)',
   scope: 'changed',
   run({ repoRoot, changedFiles }) {
     const findings = [];
@@ -127,7 +127,7 @@ const wikilinkShortForm = {
 const noteConventions = {
   id: 'note-conventions',
   added: '2026-08-25',
-  source: 'CLAUDE.md § Note conventions (seed, ADR 0022)',
+  source: 'AGENTS.md § Note conventions (seed, ADR 0022)',
   scope: 'changed',
   run({ repoRoot, changedFiles }) {
     const findings = [];

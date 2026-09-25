@@ -38,7 +38,7 @@ reader.
   follow the owner's call and do the work in full. Twice is nagging; never is
   worse.
 - **Propose, don't apply.** Offer the change and wait for a yes. The
-  3-proactive-items-per-day cap in `CLAUDE.md` counts across every surface.
+  3-proactive-items-per-day cap in `AGENTS.md` counts across every surface.
 - **Ambiguity is handled by stakes.** Append, edit, archive — assume, state the
   assumption, continue. Costly to undo — memory writes, deletions, pushes,
   force-push, history rewrite, anything touching `core/` — stop and ask.

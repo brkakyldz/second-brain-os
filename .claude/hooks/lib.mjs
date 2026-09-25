@@ -711,7 +711,7 @@ const MAINTENANCE_SIDECAR_VERSION = 2;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const UNPUSHED_DUE_MS = 24 * 60 * 60 * 1000; // below this it is just live work
 
-// Hard cap from CLAUDE.md: three proactive items per local day, counted across
+// Hard cap from AGENTS.md: three proactive items per local day, counted across
 // every surface. Before 2026-09-06 that was two independent once-a-day gates
 // (the due line, the budget warning) plus an ungated stream of check fires,
 // which is three surfaces each promising the same cap and none of them

@@ -16,7 +16,7 @@ three rules that between them decide what machinery is allowed to exist here.
 
 Split out of [[lifecycle-policy]] once that file outgrew the ~150-line cap it
 states for playbooks: what happens to a *note* stayed there, what happens to
-the *system* came here. Binding rules live in `CLAUDE.md`; this playbook holds
+the *system* came here. Binding rules live in `AGENTS.md`; this playbook holds
 the *why*. The scripts themselves and their kill criteria are in
 `scripts/README.md`; the machine they run on is `docs/ARCHITECTURE.md`.
 
