@@ -27,6 +27,8 @@ breaks because a thought grew up.
   playbooks and memory topics sit side by side and are told apart by
   `type: knowledge | project | playbook | memory`, never by folder. Everything
   here is wikilinked, has frontmatter, and earned its place.
+  A `type: project` note is a thin card: it names the repo and its state file
+  and never copies live status — execution state lives in the repo (ADR 0045).
 - `raw/` — the source store: immutable documents the owner put there.
   Articles, papers, transcripts, exports, images. **The agent reads and never
   writes** — no edit, rename, move or delete; the one exception is fetching a
@@ -34,9 +36,10 @@ breaks because a thought grew up.
   `YYYY-MM-DD_<slug>.<ext>`. This is the only place verbatim external content
   may live, which is what keeps it out of `notes/`. Full is the healthy state.
   Contract: `raw/README.md`.
-- `logs/` — append-only session logs, `YYYY-MM-DD_HHMM.md`, plus the signal
-  ledger in `logs/signals/`. Machine-written evidence — read it, never rewrite
-  it.
+- `logs/` — append-only session logs, `YYYY-MM-DD_HHMM.md` or
+  `YYYY-MM-DD_HHMM-<slug>.md` (the date prefix is the part that never varies),
+  plus the signal ledger in `logs/signals/`. Machine-written evidence — read
+  it, never rewrite it.
 - `archive/` — closed projects, stale content, and the historical working
   record. Never deleted, always moved here.
 - `.agents/skills/` — the vault's skills, the one canonical copy both runtimes
@@ -177,6 +180,20 @@ was learned. Tag each item with one of: `decision | bugfix | feature |
 discovery | preference | change`. If a durable fact emerged, also update
 `MEMORY.md` (respecting its budget and consolidation rule above).
 
+End every substantial-work log with exactly one `outcome` line:
+`outcome | claim:<what is now true> | verification:<verified|agent-claimed|partial> | refs:<paths, commits or [[wikilinks]]>`.
+`verified` requires a test, readback, external result, or the owner's
+acceptance; a file existing or an agent saying "done" is only
+`agent-claimed`. Use `partial` when the implementation landed but an external
+or fresh-session check remains. The line indexes existing evidence; it never
+copies tool output.
+
+A log about project work carries `project: <card id>` — the filename of a
+`notes/<project_id>.md` card; older values resolve through the card's
+`project_aliases` — and `runtime: claude-code | codex`. It stays under ten body
+lines and points at the repo's run report or commit for detail, because the
+repo holds execution state (ADR 0045). `/closeout` writes it.
+
 ## Note conventions
 
 - Filenames: `kebab-case.md`. Filenames are vault-unique, which is what lets
@@ -196,6 +213,9 @@ discovery | preference | change`. If a durable fact emerged, also update
     `active | superseded`
   - `source`: optional, required for anything derived from untrusted content
   - `related`: optional list of `[[wikilinks]]`
+  - Project cards add `project_id` (= filename), `repo`, `remote`,
+    `state_file` and `project_aliases`; project logs add `project` and
+    `runtime`.
   - `aliases`: optional. Its job is to catch the query that would otherwise
     miss the note — including the same term in another language, since
     retrieval here is lexical.

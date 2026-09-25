@@ -61,12 +61,13 @@ unsourced beliefs poisons every session after it.
    - Pointer with a dead target → fix the pointer or remove the line.
 
 4. **Distill old logs.** For every file in `logs/` named
-   `YYYY-MM-DD_HHMM.md` whose date is more than 30 days before today:
+   `YYYY-MM-DD_HHMM.md` or `YYYY-MM-DD_HHMM-<slug>.md` whose date is more than
+   30 days before today:
    - Extract durable facts and decisions into the matching
      `notes/<topic>.md` topic file (append, don't duplicate).
    - Move the original log file to `archive/` (never delete it — the raw
      record stays available, just out of the searched-by-default path;
-     archive is flat, so the filename stays `YYYY-MM-DD_HHMM.md`, ADR 0028).
+     archive is flat, so the filename stays as it was, ADR 0028).
    - Record the batch size and how many logs produced a genuinely new fact
      (ADD) versus only facts already present (NOOP). This is the evidence for
      whether the 30-day rule earns its cost.
@@ -85,7 +86,7 @@ unsourced beliefs poisons every session after it.
 
 6. **Never delete — propose instead.** Nothing produced by this pass is ever
    deleted outright. Stale content always lands in `notes/` or in `archive/`,
-   which is flat — a distilled log keeps its `YYYY-MM-DD_HHMM.md` name and
+   which is flat — a distilled log keeps its dated filename and
    moves to `archive/` itself, never into a subfolder (ADR 0028, and step 4
    above says the same thing). Only exact duplicate lines within
    `MEMORY.md`/`USER.md` itself may be collapsed to one. If a note meets all
