@@ -39,6 +39,7 @@ text { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Anti
   .sub, .el { font-size: 13.5px; }
   .zl { font-size: 13px; }
   .cap { font-size: 15.5px; }
+  .chip-t { font-size: 13px; }
 
 }
 @media (prefers-reduced-motion: no-preference) {
