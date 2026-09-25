@@ -10,14 +10,21 @@ tried before escalating.
 
 ## Layers
 
-1. **Tier 0** — `core/IDENTITY.md`, `core/USER.md`, `core/MEMORY.md`,
-   `core/OPEN_QUESTIONS.md`. Already in context via the SessionStart hook;
-   check it first, no tool call needed.
+1. **Tier 0 — what is actually in context.** Inside the vault: `IDENTITY.md`,
+   `USER.md`, `MEMORY.md`, injected by the SessionStart hook. In any other
+   project: `USER.md` and `MEMORY.md` only. `core/OPEN_QUESTIONS.md` is
+   **never inlined** — the hook injects a pointer to it, so reading it is a
+   tool call like any other file. Check what is in context first; open the
+   questions ledger when the query is about live questions or vault planning.
 
-2. **`rg` over `notes/` first**, then `logs/`. Search titles,
-   `aliases:` frontmatter, `tags:`, and body text. If the owner converses
-   with you in a language other than the one the vault is written in, try the
-   query in **both** — a lexical index only matches the token it was given.
+2. **Rank `notes/` + `core/` first**, then use `rg` over `logs/`. Run
+   `node scripts/retrieval-eval.mjs --query "<the user's query>"`; it ranks by
+   unique normalized query-token overlap, so a long report does not win merely
+   by repeating a term. Open only the two or three plausible hits. If the
+   ranked lookup returns nothing useful, search titles, `aliases:`, `tags:` and
+   body text with `rg`. If the owner converses with you in a language other
+   than the one the vault is written in, try the query in **both** — a
+   lexical index only matches the token it was given.
 
 3. **Wikilink/backlink hops (1–2)** from any hit — `rg` for `[[hit-name]]`
    across the vault to find what links to or from it.
@@ -44,7 +51,8 @@ tried before escalating.
   | `typo` | the query or the note was misspelled | nothing — noise |
   | `not-exists` | the vault genuinely never had it | a note worth writing, not a search problem |
 
-  Q-12 closes on a *cluster of `paraphrase-miss` lines*, nothing else. An
+  The lexical-only decision reopens on a *cluster of `paraphrase-miss`
+  lines*, nothing else. An
   uncaused `retrieval-failure` line is unusable evidence — it can be read as
   arguing for anything, which means it argues for nothing.
 

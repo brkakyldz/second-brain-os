@@ -9,6 +9,7 @@
       "Bash(node scripts/vault-metrics.mjs:*)",
       "Bash(node scripts/link-sweep.mjs:*)",
       "Bash(node scripts/retrieval-eval.mjs:*)",
+      "Bash(node scripts/brain-doctor.mjs:*)",
       "Bash(node scripts/tests/index-coverage.test.mjs:*)",
       "Bash(node .claude/hooks/append-signal.mjs:*)"
     ]

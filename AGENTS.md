@@ -47,8 +47,8 @@ breaks because a thought grew up.
   `templates/`, `eval/`. The name is historical, not ownership. `.codex/`
   holds only the thin Codex SessionStart adapter. Not vault content; this is
   how the agent runs, not what it knows about the world.
-- `scripts/` — helper jobs (link sweep, metrics, retrieval eval), each
-  invoked by hand or by a skill. Nothing here runs on a clock:
+- `scripts/` — helper jobs (link sweep, metrics, retrieval eval, brain
+  doctor), each invoked by hand or by a skill. Nothing here runs on a clock:
   unattended scheduling was retired (ADR 0033).
 - Root files: `INDEX.md` is the page catalog — every note, one line each, the
   first thing to read when answering a question. `PROPOSALS.md` is a list of
