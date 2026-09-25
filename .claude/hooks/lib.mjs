@@ -22,11 +22,13 @@ export function thisDir(importMetaUrl) {
   return path.dirname(fileURLToPath(importMetaUrl));
 }
 
-// Brain-root resolution precedence (ADR 0008): BRAIN_DIR env → script's own
-// location → CLAUDE_PROJECT_DIR. Scripts always live at
-// <vault>/.claude/hooks/<name>.mjs, so script-location is always the vault
-// root — this makes the same scripts correct when invoked from any cwd by
-// user-level hooks (global mode) as well as from inside the vault itself.
+// Brain-root resolution precedence (ADR 0008): BRAIN_DIR env → the script's
+// own location. Hooks live at <vault>/.claude/hooks/<name>.mjs, so their
+// location is always the vault root — this makes the same code correct when
+// invoked from any cwd by user-level hooks (global mode) as well as from
+// inside the vault itself. Every caller passes its location; the
+// CLAUDE_PROJECT_DIR → cwd tail below is reached only by a caller that
+// passes none.
 export function getRepoRoot(hookDir) {
   const fromBrainDir = process.env.BRAIN_DIR;
   if (fromBrainDir && fromBrainDir.trim() !== '') {
@@ -88,9 +90,10 @@ function timestamp() {
   return new Date().toISOString();
 }
 
-// The automation log is unbounded otherwise: it is appended to by every hook
-// of every session on the machine. One generation of history is enough — the
-// Signal Ledger, not this file, is the durable record.
+// The automation log is unbounded otherwise: it is appended to by the
+// SessionStart hook of every session on the machine, and by the checks. One
+// generation of history is enough — the Signal Ledger, not this file, is the
+// durable record.
 const AUTOMATION_LOG_MAX_BYTES = 512 * 1024;
 
 // Best-effort single-generation rotation. Race-tolerant: two processes may
@@ -164,12 +167,12 @@ export function getGitDir(repoRoot) {
   }
 }
 
-// The vault activation gate (ADR 0014). Every hook is inert without the
-// core/.vault-active marker: no pull, no Tier-0 injection. It is what keeps
-// the public template — and a clone that has not been set up yet — from
-// acting on its own (until v1.1 it also guarded a committing, pushing
-// checkpoint). Documented since 2026-08-18 but never implemented until
-// 2026-08-22.
+// The vault activation gate (ADR 0014). The SessionStart hook is inert
+// without the core/.vault-active marker: no pull, no Tier-0 injection. It
+// is what keeps the public template — and a clone that has not been set up
+// yet — from acting on its own (until v1.1 it also guarded a committing,
+// pushing checkpoint). Documented since 2026-08-18 but never implemented
+// until 2026-08-22.
 export function isVaultActive(repoRoot) {
   try {
     return existsSync(path.join(repoRoot, 'core', '.vault-active'));
@@ -307,7 +310,7 @@ function sleepSync(ms) {
 // { ok, reentrant } — always pass it to releaseBrainLock, which is a no-op
 // for a reentrant (already-owned) acquire.
 //
-// Retry budget must stay small: hooks have a 30s timeout and ADR 0004 forbids
+// Retry budget must stay small: the hook has a 60s timeout and ADR 0004 forbids
 // stalling a session. The default is still a single attempt (skip-not-wait);
 // only callers that cannot be retried later — a signal append has no later
 // run to pick it up — ask for more.
@@ -571,6 +574,8 @@ export const SIGNAL_TYPES = [
   'acceptance',
   'rejection',
   'check-fire',
+  // Historical: the weekly access rollup of the reuse telemetry, removed by
+  // ADR 0039 (see below). Nothing writes it any more; kept so old lines parse.
   'retrieval-rollup',
   // Historical: one line per session the retired flush mechanism handled.
   // Nothing writes this any more; the type stays listed so the existing lines

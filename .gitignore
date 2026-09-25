@@ -44,7 +44,7 @@ scripts/.last-push
 # never a copy and never tracked: it is machine state (ADR 0044)
 .claude/skills
 
-# the marker that switches the hooks on — created by setup, per clone, and
-# deliberately never committed, so a fresh clone stays inert until it has been
-# personalized (ADR 0014)
+# the marker that switches the SessionStart hook on — created by setup, per
+# clone, and deliberately never committed, so a fresh clone stays inert until
+# it has been personalized (ADR 0014)
 core/.vault-active

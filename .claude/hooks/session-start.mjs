@@ -24,11 +24,13 @@ const __dirname = path.dirname(__filename);
 
 const HEADER = '## Second Brain — session context (auto-injected)';
 
-// Brain-root resolution precedence (ADR 0008): BRAIN_DIR env → script's own
-// location → CLAUDE_PROJECT_DIR. Scripts always live at
-// <vault>/.claude/hooks/session-start.mjs, so script-location is always the
+// Brain-root resolution precedence (ADR 0008): BRAIN_DIR env → the script's
+// own location. This file always lives at
+// <vault>/.claude/hooks/session-start.mjs, so its location is always the
 // vault root — this makes the same script correct when invoked from any cwd
 // by user-level hooks (global mode) as well as from inside the vault itself.
+// CLAUDE_PROJECT_DIR is never the brain root here: it names the session's
+// project (below).
 function getRepoRoot() {
   const fromBrainDir = process.env.BRAIN_DIR;
   if (fromBrainDir && fromBrainDir.trim() !== '') {
@@ -38,10 +40,11 @@ function getRepoRoot() {
   return path.resolve(__dirname, '../..');
 }
 
-// The session's own project dir — the cwd Claude Code is actually working
-// in for this session. Distinct from the brain root above: when running in
-// global mode this will differ from the brain root for every project except
-// the vault itself.
+// The session's own project dir — the cwd the runtime is actually working
+// in for this session. Claude Code sets CLAUDE_PROJECT_DIR; the Codex adapter
+// (.codex/hooks/session-start.mjs) sets it from its cwd. Distinct from the
+// brain root above: in global mode this differs from the brain root for
+// every project except the vault itself.
 function getProjectDir() {
   const fromEnv = process.env.CLAUDE_PROJECT_DIR;
   if (fromEnv && fromEnv.trim() !== '') {
@@ -242,7 +245,7 @@ function buildContext(repoRoot, pullResult, projectDir) {
   if (isOutsideVault) {
     header += `\nCurrent project: ${projectDir}`;
   }
-  // A skipped pull is not a failure worth a banner - the lock holder is
+  // A skipped pull is not a failure worth a warning - the lock holder is
   // pulling the same repo. Only a real failure gets surfaced to the model.
   if (!pullResult.ok && !pullResult.skipped) {
     header += `\n⚠ git pull failed (${pullResult.warning}) — working from local state`;
@@ -339,10 +342,11 @@ function buildContext(repoRoot, pullResult, projectDir) {
 // envelope included, logs the figure on every run so the real threshold can be
 // observed rather than assumed, and never truncates anything silently.
 //
-// Over the limit, optional sections are dropped whole, newest first: a backup
-// notice or a status banner loses its space before a Tier-0 file does. If only
-// core content is left it is delivered oversized and loudly logged — half a
-// MEMORY.md is worse than a payload the harness may or may not shorten.
+// Over the limit, optional sections are dropped whole, newest first: the
+// backup notice, today the only optional one, loses its space before a
+// Tier-0 file does. If only core content is left it is delivered oversized
+// and loudly logged — half a MEMORY.md is worse than a payload the harness
+// may or may not shorten.
 const PAYLOAD_SOFT_LIMIT_BYTES = 9500;
 
 function serializedSize(payload) {
