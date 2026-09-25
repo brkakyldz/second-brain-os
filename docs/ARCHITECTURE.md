@@ -50,7 +50,8 @@ Two more were added by what went wrong:
         +-- AGENTS.md   the constitution; CLAUDE.md only imports it
         +-- .agents/    judgment procedures (/ingest, /curator, /lesson …) — the
         |               one skills copy; .claude/skills is a link to it
-        +-- .claude/    shared hook implementation, note templates, eval set
+        +-- .claude/    shared hook implementation, note and project-repo
+        |               templates, eval set
         +-- .codex/     thin Codex SessionStart adapter
         +-- scripts/    deterministic maintenance (by hand or from a skill)
 ```
@@ -175,7 +176,8 @@ Only the parts of the policy that exist as running code belong here.
   everything in it.
 - **`brain-doctor.mjs`** reports, read-only, whether each runtime has exactly
   one SessionStart and no retired git-writing hook, whether the skills link
-  resolves, and whether the budgets hold.
+  resolves, whether a runtime in global mode can load `/closeout`, `/lesson`
+  and `/recall` in project sessions, and whether the budgets hold.
 
 Written as code but **not run automatically** since v1.1:
 
@@ -261,6 +263,9 @@ Three properties are deliberate:
   symptom is visible (an un-ingested file appears in no index and no note) and
   the response is written down in advance: three weeks of that means the inlet
   isn't wanted, and it gets removed rather than nagged about.
+- **Every project repo has to commit its memory** (§10) — plans and research
+  included. A public project either publishes them or stays private while it
+  is being built.
 
 ## 9. From correction to check
 
@@ -288,3 +293,75 @@ waiting for organic corroboration. That shortcut has a cost worth knowing: a
 check that never fires cannot be distinguished from a check that *cannot* fire,
 so a check earns its place by catching a synthetic offender, not by staying
 quiet.
+
+## 10. Project work: the vault and the repo
+
+Two stores, split by what the record is for (ADR 0045). Each fact has one
+owner.
+
+- **The vault holds what outlives a project:** distilled knowledge, lessons,
+  one thin card per project (`notes/<project_id>.md` — why it exists, where
+  it lives, what it taught), and short session logs.
+- **Each project repo holds its own execution state, committed:** `AGENTS.md`
+  (the contract — timeless, no status), `docs/CURRENT_STATE.md` (the only
+  file that states status), `docs/WORKLOG.md` (the append-only direction
+  log), `docs/runs/` (one report per autonomous run), and its plans, ADRs,
+  research and evidence.
+
+The lifecycle of one piece of project work:
+
+```
+  vault: notes/<project_id>.md     thin card: repo, state_file, why, what it
+        |                          taught — never a copy of status
+        | points at
+        v
+  repo: docs/CURRENT_STATE.md      read first, with AGENTS.md and the last
+        |                          10 lines of docs/WORKLOG.md
+        v
+  work in the repo                 code and its STATE update committed together
+        |
+        v
+  /closeout                        STATE, WORKLOG, the run report of an
+        |                          autonomous run, this task's worktrees,
+        |                          one commit of exactly the paths it wrote
+        v
+  vault: logs/YYYY-MM-DD_HHMM-<slug>.md
+                                   project: <card id>, runtime:, <= 10 lines,
+                                   one outcome line pointing at repo refs
+```
+
+Why the split runs this way: in the reference instance, the one project that
+carried a multi-milestone plan to its final gates unattended did it on a
+single living state file in its own repo; status rotted everywhere else (plans
+still "ready to execute" after shipping, READMEs a version behind);
+completion reports went to chat and were lost; and no coding session ever
+resumed from a vault note. A record earns its keep by being read at the moment
+it matters. Status is read at resume time, inside the repo; knowledge that
+should carry into the *next* project has to survive the repo being closed.
+
+How the pieces meet:
+
+- **The formats** ship in `.claude/templates/project-repo/` (`AGENTS`
+  contract, `CLAUDE` shim, STATE, WORKLOG, run report — with a README on
+  adopting them) and `.claude/templates/project.md` (the card). Copied into
+  a project, they live there; the vault never reads them back.
+- **Global mode carries the rule into every project.** Outside the vault the
+  SessionStart hook injects standing rules: read the repo's `AGENTS.md`,
+  STATE and last WORKLOG lines before planning; end substantial work with
+  `/closeout`; never copy live status into the brain. Its first line, "The
+  brain lives at …", is how the skills find the vault from any repo.
+- **Three skills cross the boundary** — `/closeout`, `/lesson`, `/recall`.
+  Each resolves the brain (the vault itself, that SessionStart line,
+  `BRAIN_DIR`, or its own link target) and writes only brain paths into the
+  brain, committed by explicit path. `node install.mjs --link-global-skills`
+  links them into each runtime's user-level skills folder, opt-in and
+  reversible; everything else in `.agents/skills/` stays vault-scoped.
+- **An interrupted run is visible from files alone:** STATE names an
+  `active_run` whose report is missing or has no `status:`. The next session
+  trusts git, the diff and a fresh test run over what is written down, then
+  corrects STATE.
+
+Deliberately not shipped: the reference instance also has commit-gate,
+holdout-lock and test-gate hooks for its project repos. They are runtime hooks
+with their own configs, and a template user adds one when they see the failure
+it prevents. The project-repo README describes them.

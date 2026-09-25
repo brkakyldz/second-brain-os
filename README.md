@@ -42,6 +42,13 @@ and removed are listed as removed rather than quietly dropped — see
   because two sessions working in one checkout would sweep up each other's
   half-written files. Everything fails open: a failed pull never blocks a
   session.
+- **Project state lives in the project's repo; the brain keeps what outlives
+  it.** A project's status, direction log and run reports are committed in
+  its own repo (`docs/CURRENT_STATE.md`, `docs/WORKLOG.md`, `docs/runs/`);
+  the brain holds a thin card per project, the knowledge and lessons it
+  produced, and short session logs that point back at the repo. The
+  lifecycle: card → repo STATE → work → `/closeout` → one short brain log.
+  Formats and adoption steps: `.claude/templates/project-repo/`.
 - **The rules that can be checked are written as checks.** Wikilink form, note
   frontmatter and catalog coverage live in `.claude/hooks/checks.mjs` and
   `scripts/link-sweep.mjs`, not only as prose — this system's hardest-won
@@ -60,7 +67,8 @@ logs/         append-only session logs + logs/signals/, the event ledger
 archive/      closed and superseded content — never deleted, always moved here
 scripts/      link sweep, retrieval eval, brain doctor, vault metrics
 .agents/      skills — the one copy both runtimes load
-.claude/      the shared SessionStart hook, note templates, the golden set
+.claude/      the shared SessionStart hook, note and project-repo templates,
+              the golden set
 .codex/       the thin Codex adapter into that same hook
 AGENTS.md     the constitution — the rules you and both agents work under
 CLAUDE.md     one line that imports AGENTS.md, plus Claude-only notes
@@ -68,7 +76,7 @@ INDEX.md      the page catalog — read this first when answering a question
 PROPOSALS.md  open work you keep by hand; no pass writes to it
 SETUP.md      agent-run installation runbook
 install.mjs   one-time interactive personalization (manual path)
-docs/         architecture guide and the decision index
+docs/         architecture guide, the decision index, full records from 0045
 ```
 
 Plain Markdown, JSON and Node — no build step, no runtime dependency beyond
@@ -124,6 +132,7 @@ The commands worth knowing:
 | `/ingest <file>` | read a source in `raw/` into the wiki — discuss, distill, reconcile, catalog |
 | `/file` | keep an analysis produced in conversation as a proper page, instead of losing it to the transcript |
 | `/lesson` | capture a correction you just made, verbatim, before it is rationalized away |
+| `/closeout` | end project work: update the repo's STATE and WORKLOG, write the run report of an autonomous run, commit exactly the task's paths, leave one short brain log |
 | `/recall` | four-layer lexical retrieval, and it logs the misses so search failure becomes data |
 | `/curator` | consolidate memory, resolve stale facts, keep the core files inside budget |
 | `/audit` | structural and semantic report — budgets, orphans, contradictions, tag sprawl. Reports only, never fixes |
@@ -155,6 +164,24 @@ so they are correct from any working directory. Trade-off, plainly: every
 session on the machine pays a small `git pull` at start — skipped whenever the
 vault has uncommitted changes, because those belong to a live task.
 
+In a project session the hook also injects standing rules: the project's
+state lives in its own repo, so read its `AGENTS.md`, `docs/CURRENT_STATE.md`
+and the last lines of `docs/WORKLOG.md` before planning, and end substantial
+work with `/closeout`. For `/closeout`, `/lesson` and `/recall` to load
+there, link them at user level — opt-in, and `--unlink-global-skills` undoes
+it:
+
+```
+node install.mjs --link-global-skills
+```
+
+It links the three skill folders into `~/.claude/skills` and
+`~/.codex/skills` (or `CLAUDE_CONFIG_DIR` / `CODEX_HOME`) for each runtime
+that is installed, never replaces anything that is not a broken link of its
+own, and the skills find the vault from the hook's "The brain lives at …"
+line. To give a project the repo-side formats, see
+[`.claude/templates/project-repo/README.md`](.claude/templates/project-repo/README.md).
+
 ## Upgrading from v1.0
 
 v1.1 removes the Stop / SessionEnd / PreCompact checkpoint, the session flush,
@@ -170,6 +197,11 @@ the reuse telemetry and the proposals sweep. After pulling:
    still wired, a duplicate SessionStart, or a missing skills link.
 4. From now on, commit your own work with explicit paths — nothing commits for
    you any more. `PROPOSALS.md` is yours to keep by hand.
+5. In global mode, optionally `node install.mjs --link-global-skills` so
+   `/closeout`, `/lesson` and `/recall` load in project sessions. Project
+   notes become thin cards (`project_id`, `repo`, `state_file` — see
+   `.claude/templates/project.md`); their live status moves into each
+   project's own `docs/CURRENT_STATE.md`.
 
 ## Safety
 
@@ -213,6 +245,13 @@ changed file belongs to which task. The reference instance's checkpoint swept
 53 files from several sessions into one commit before it was retired. The
 price: a session that ends without committing leaves its files for the next
 one. `brain-doctor.mjs` and `git status` show them.
+
+**Where does a project's status go?** Into the project's own repo, in
+`docs/CURRENT_STATE.md` — the only file that states it — committed with the
+code it describes. The brain's card for that project says where the repo and
+that file are and never restates them: a copied status is right for a day and
+wrong afterwards. The reference instance tried the opposite (the brain as the
+only working record) and no coding session ever resumed from it.
 
 **What if I work offline?** Everything works locally. The pull at start fails
 open, and a push that fails just leaves the commit local until the next

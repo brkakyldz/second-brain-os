@@ -24,5 +24,6 @@
      know what to explain and what to assume. -->
 
 ## Current focus
-<!-- Active projects, one line each, each pointing at its note:
-     - Project X — one line about where it stands → [[project-x]] -->
+<!-- Active projects, one line each, each pointing at its card. Say what the
+     project is, not where it stands — live status lives in its repo:
+     - Project X — one line on what it is → [[project-x]] -->

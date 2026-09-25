@@ -103,10 +103,15 @@ In the new clone:
   with their answer to question 6, and delete the instruction comment above it.
   If they converse in English, simplify that section to a single line rather
   than leaving a split that doesn't apply to them.
-- **`notes/`** — create a note for each project they named, using
-  `.claude/templates/project.md`. Give each at least one outbound wikilink
-  before you close it, and add a row to `INDEX.md` under **Projects**.
-  `node scripts/link-sweep.mjs` reports any note you forget to catalog.
+- **`notes/`** — create a card for each project they named, using
+  `.claude/templates/project.md`: `project_id` equal to the filename, `repo`
+  (the absolute path of its checkout, forward slashes, or `none`), `remote`
+  and `state_file` (`docs/CURRENT_STATE.md`, or `none` until the project
+  has one). A card says why the project exists and where it lives; it never
+  carries status — that lives in the project's own repo. Give each at least
+  one outbound wikilink before you close it, and add a row to `INDEX.md`
+  under **Projects**. `node scripts/link-sweep.mjs` reports any note you
+  forget to catalog.
 - **`core/MEMORY.md`** — leave it empty. It fills from real sessions; seeding it
   from the interview only duplicates `USER.md`.
 - **Link the skills.** Run `node install.mjs --link-skills`. It makes
@@ -201,6 +206,24 @@ Codex wiring is user-level, through the thin adapter in `.codex/hooks/`:
   vault; only the Tier-0 injection needs the hook. Say so, and let your user
   choose between wiring it globally and going without it.
 
+### Project sessions (global mode only)
+
+In global mode a session in any project is told to end its work with
+`/closeout`, which keeps the project's state in its own repo and leaves a
+short log in the brain. For `/closeout`, `/lesson` and `/recall` to load
+there, offer to link them at user level. It writes into the user-level skills
+folders, so show the command and get a yes first:
+
+```
+node install.mjs --link-global-skills
+```
+
+It creates one link per skill in `~/.claude/skills` and `~/.codex/skills`
+(or `CLAUDE_CONFIG_DIR` / `CODEX_HOME`) for each runtime that is installed,
+pointing back into the vault. It refuses to replace a real folder or someone
+else's link, and `node install.mjs --unlink-global-skills` removes exactly
+its own links again.
+
 Tell your user this wiring is per-machine. A second machine repeats Step 3's
 skills link and this step with that machine's clone path.
 
@@ -222,11 +245,23 @@ From inside the clone:
 2. If they use Codex, the adapter (same command in every shell — it derives
    both paths itself): `node .codex/hooks/session-start.mjs`. Same check.
 
-3. The whole brain path: `node scripts/brain-doctor.mjs`. Expect **PASS** for
+3. Global mode only — the hook as a project session sees it. Run it with
+   `CLAUDE_PROJECT_DIR` pointing anywhere outside the vault:
+   - Git Bash / macOS / Linux:
+     `CLAUDE_PROJECT_DIR="$HOME" node .claude/hooks/session-start.mjs`
+   - Windows PowerShell:
+     `$env:CLAUDE_PROJECT_DIR = $HOME; node .claude/hooks/session-start.mjs`
+
+   The context should contain "Global brain mode — standing rules", naming
+   the vault path and `/closeout`. Reset the variable afterwards in
+   PowerShell (`Remove-Item Env:CLAUDE_PROJECT_DIR`).
+
+4. The whole brain path: `node scripts/brain-doctor.mjs`. Expect **PASS** for
    the hooks of each runtime they wired, the skills link, Tier-0 budgets,
-   SessionStart evidence (step 1 just produced it), recall and retrieval. A
-   **WARN** for a runtime they don't use is fine. Any **FAIL** — stop and
-   investigate before reporting success.
+   SessionStart evidence (step 1 just produced it), recall and retrieval — and,
+   in global mode, **Global skills** once the project-session skills are
+   linked. A **WARN** for a runtime they don't use is fine. Any **FAIL** — stop
+   and investigate before reporting success.
 
 ## Step 7 — hand-off summary
 
@@ -241,11 +276,18 @@ Tell your user, concretely:
   work is committed by the session that did it, with explicit paths — so two
   sessions (or Claude Code and Codex side by side) never sweep up each other's
   files. If a session ends without committing, `git status` shows what it left.
+- **Project work lives in the project's repo.** Its status, direction log
+  and run reports are committed there (`docs/CURRENT_STATE.md`,
+  `docs/WORKLOG.md`, `docs/runs/`); the brain keeps a thin card, what the
+  project taught, and one short log per piece of substantial work, written by
+  `/closeout`. To give a project those files:
+  `.claude/templates/project-repo/README.md`.
 - **`INDEX.md` is the map.** One line per page; it is what makes retrieval
   cheap, and `link-sweep.mjs` reports any note missing from it.
 - **`PROPOSALS.md` is theirs.** A hand-kept list of open work; no pass writes
   to it. Findings are reported in the conversation, acted on or dropped.
-- The commands: `/ingest`, `/file`, `/lesson`, `/recall`, `/curator`, `/audit`.
+- The commands: `/ingest`, `/file`, `/lesson`, `/recall`, `/closeout`,
+  `/curator`, `/audit`.
   Mention `/lesson` specifically — the first time the agent gets something
   wrong is the most useful thing that will happen this week, and it only
   becomes an enforced check if it is captured.

@@ -327,7 +327,7 @@ ${where || '<!-- unanswered -->'}
 
 ## Current focus
 ${focus.length
-    ? focus.map((f) => `- **${f}** — <!-- one line on where it stands --> → [[${slug(f)}]]`).join('\n')
+    ? focus.map((f) => `- **${f}** — <!-- one line on what it is --> → [[${slug(f)}]]`).join('\n')
     : '<!-- unanswered -->'}
 
 <!-- Filled ${today} by install.mjs from a setup interview.
@@ -422,8 +422,8 @@ for you, and nothing ever stages the whole tree:
     git commit -m "setup: personalize brain"
 ${focus.length ? `
 Your current-focus lines link to project notes that do not exist yet. Create
-each from .claude/templates/project.md with a row in INDEX.md (or ask your
-agent to) — until then \`node scripts/link-sweep.mjs\` reports them as broken.
+each as a thin card from .claude/templates/project.md, with a row in INDEX.md
+(or ask your agent to) — until then \`node scripts/link-sweep.mjs\` reports them as broken.
 ` : ''}
 Next, optional but recommended — GLOBAL MODE
 --------------------------------------------

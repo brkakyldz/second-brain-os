@@ -84,8 +84,9 @@ survives as a convention for the skills and feeds nothing that scores them.
 
 - **What:** one read-only table over the brain path of both runtimes: exactly
   one SessionStart per runtime (project scope or global mode, never both), no
-  retired v1.0 git-writing hook still wired, the `.claude/skills` link,
-  Tier-0 budgets, the last recorded session-start payload, `/recall`'s
+  retired v1.0 git-writing hook still wired, the `.claude/skills` link, in
+  global mode the user-level `closeout`/`lesson`/`recall` links, Tier-0
+  budgets, the last recorded session-start payload, `/recall`'s
   resources, the current retrieval score, top-level entries against the
   `AGENTS.md` folder map, and Git delivery state.
 - **When:** after setup, after changing hook wiring, after upgrading, or when
