@@ -165,9 +165,9 @@ export function getGitDir(repoRoot) {
 }
 
 // The vault activation gate (ADR 0014). Every hook is inert without the
-// core/.vault-active marker: no pull, no checkpoint commit, no push, no
-// Tier-0 injection. It is what keeps the public template — and a clone that
-// has not been set up yet — from committing and pushing itself. Documented
+// core/.vault-active marker: no pull, no Tier-0 injection. It is what keeps
+// the public template — and a clone that has not been set up yet — from
+// acting on its own (it used to guard a committing, pushing checkpoint too). Documented
 // since 2026-08-18 but never implemented until 2026-08-22.
 export function isVaultActive(repoRoot) {
   try {
@@ -660,18 +660,17 @@ export function appendSignal(repoRoot, { type, payload, sessionId, logTag, when 
 }
 
 // The session-trace sidecar (ADR 0032) was removed with the flush mechanism
-// it existed for (simplification plan, Phase 2). Its readers were flush.mjs
+// it existed for (ADR 0038). Its readers were flush.mjs
 // and the SessionStart sweep, both gone; `.claude/.sessions.json` is
 // gitignored machine state, so nothing tracked depends on it. Sessions that
 // were already digested keep their `session-digest` ledger lines as history.
 
 // The reuse-telemetry sidecar and its weekly rollup stood here (ADR 0011,
-// 0024, 0032). Removed 2026-09-06 by the plan's own criterion: the Phase 5
-// benefit check answered its question with held-out tasks, not access counts,
-// so the telemetry informed no decision in the trial it was kept for. Q-14 —
-// the write-only-graveyard question it was built to answer — closed on
-// 2026-08-27 and has not been reopened. The `retrieval-rollup` ledger lines it
-// did write stay in `logs/signals/` as history.
+// 0024, 0032). Removed by ADR 0039: a held-out benefit check answered its
+// question with real tasks, not access counts, so the telemetry informed no
+// decision in the trial it was kept for, and the write-only-graveyard question
+// it was built to answer had already been settled. Any `retrieval-rollup`
+// ledger lines it wrote stay in `logs/signals/` as history.
 
 // tmp + rename: a crash mid-write leaves the previous file intact instead of
 // a half-JSON one every later read would discard. On Windows the rename can

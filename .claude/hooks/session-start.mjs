@@ -392,7 +392,7 @@ function emit(additionalContext) {
 }
 
 // The flush sweep that used to live here was removed with the flush mechanism
-// itself (simplification plan, Phase 2). SessionStart now pulls, injects
+// itself (ADR 0038). SessionStart now pulls, injects
 // Tier 0, and stops — nothing is spawned, and stdin is read only to satisfy
 // the hook protocol.
 async function main() {

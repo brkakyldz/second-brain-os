@@ -1,143 +1,126 @@
-# scripts/ — automation roster
+# scripts/ — hand-run and skill-run tooling
 
-Deterministic work lives here as plain scripts (PowerShell + Node stdlib, no
-npm installs). LLM spend is reserved for judgment calls (`/triage`,
-`/curator`) — see `CLAUDE.md` and `_brain/playbooks/lifecycle-policy.md` for
-the policy these scripts implement. Substrate: **Windows Task Scheduler +
-headless `claude -p`**.
+Deterministic work lives here as plain Node scripts — stdlib only, no npm
+install, identical on Windows, macOS and Linux. LLM spend is reserved for
+judgment calls (`/curator`, `/audit`); see `AGENTS.md` and
+[[self-evolution-policy]] for the policy these scripts implement.
 
-Two scripts touch git/vault state concurrently with each other, so they share
-a lockfile: `scripts/.brain.lock` (PID + UTC timestamp + owner, one line;
-stale and auto-broken after 2 hours). `lock.ps1` implements it for the
-PowerShell scripts; `daily3-resurface.mjs` re-implements the same tiny
-protocol inline since it's Node. **B1, B3, B5, and B6 all respect this
-lock** — if another job is mid-run, the later one logs a message and exits 0
-rather than racing it.
+**Nothing here is scheduled.** Unattended maintenance was built, run and
+retired in the reference instance (ADR 0033): a job that runs with nobody
+watching produces work nobody reads, and every defect it hit lived in the
+supervision layer that only exists because nobody is watching. Every script
+below is run by hand or by a skill, in a session someone is sitting in front
+of. Nothing reports one as overdue either (ADR 0038).
 
-## B1 — `verify-backup.ps1`
-
-- **What:** checks `origin` is reachable (`git ls-remote`), local HEAD is in
-  sync with `origin/<branch>` (not ahead, not behind), and no uncommitted
-  file is older than 12 hours.
-- **When:** daily.
-- **Output:** silent on success (exit 0, nothing written). On failure: an
-  alert line on stdout plus `_brain/logs/YYYY-MM-DD_backup-alert.md`, exit
-  non-zero.
-- **Kill criterion:** never — keep this as long as the vault has a remote.
+Every script carries a **kill criterion**: a job with no defined way to fail is
+one nobody turns off. The numbering (B2, B11, …) is the reference instance's
+roster, kept so the ADRs that cite it still resolve; gaps are jobs that were
+retired.
 
 ## B2 — `link-sweep.mjs`
 
-- **What:** scans every `.md` file (excluding `.git/`, `.claude/`,
-  `.obsidian/`, `archive/` as sources) for broken `[[wikilinks]]` (by
-  filename or `aliases:` frontmatter), orphan notes (no inbound *and* no
-  outbound resolved links — separately excluding `_brain/logs/`, `daily/`,
-  `inbox/` from being *reported*, since that's episodic content, not the
-  linked graph), and dangling pointer lines in `_brain/MEMORY.md`.
-- **When:** weekly.
-- **Output:** report note `_brain/logs/YYYY-MM-DD_link-sweep.md`.
+- **What:** scans every vault-content `.md` file (`.git/`, `.claude/`,
+  `.codex/`, `.agents/`, `.obsidian/` are not walked; `archive/` is indexed as
+  a link target but not scanned as a source) for broken `[[wikilinks]]` (by
+  filename or `aliases:`), orphan notes (no inbound *and* no outbound links —
+  `logs/`, `archive/`, `raw/`, `core/`, `docs/`, `scripts/` and the root docs
+  are never reported), dangling pointer lines in `core/MEMORY.md`, duplicate
+  basenames (which make `[[name]]` ambiguous and fail silently), and notes in
+  `notes/` with no row in `INDEX.md`.
+- **When:** by hand, or from a `/curator` session — `node scripts/link-sweep.mjs`.
+- **Output:** a report at `logs/YYYY-MM-DD_link-sweep.md`. It writes that one
+  file and nothing else; commit it or delete it like any other log.
 - **Kill criterion:** orphan count flat for a month — simplify or drop it.
 
-## B3 — `offsite-bundle.ps1`
+## B4 — gitleaks pre-commit hook · **opt-in**
 
-- **What:** `git bundle create --all` to a destination directory, then `git
-  bundle verify`. Keeps the last 8 `*.bundle` files in that directory,
-  deletes older ones (bundle files only — nothing else in the destination is
-  touched).
-- **When:** weekly.
-- **Output:** a verified `.bundle` file in the destination.
-- **Kill criterion:** never; restore-test quarterly (`git clone
-  <bundle-path> scratch-restore-test` and confirm history is intact).
-- **Destination — action required:** resolved from `-Destination` param, else
-  `$env:SECOND_BRAIN_BUNDLE_DIR`, else the placeholder
-  `%USERPROFILE%\vault-backups`. **The placeholder is not a real off-site
-  location.** You must set `SECOND_BRAIN_BUNDLE_DIR` to an actual second
-  location (different physical drive, ideally a different machine or a
-  cloud-synced folder) before this is scheduled for real — GitHub alone is
-  not the "1" of 3-2-1 backup.
+`.pre-commit-config.yaml` declares `gitleaks` (pinned at `v8.18.4`). **Since
+v1.1 it is the only secret scan, and only once you install it:** the Node
+scanner in `.claude/hooks/lib.mjs` (`scanStagedForSecrets`) ran inside every
+checkpoint commit, and the checkpoint was retired with whole-tree commits (ADR
+0042, 0044). Nothing scans a commit unless you enable this:
+`pip install pre-commit && pre-commit install`.
 
-## B4 — gitleaks pre-commit hook
+- **Recommended, by hand:** turn on GitHub's secret-scanning **push
+  protection** for your vault repo (Settings → Code security). It is a repo
+  setting, not something a script can do.
+- **Kill criterion:** none — keep it as long as the vault has a remote.
 
-`.pre-commit-config.yaml` already runs `gitleaks` (the standard
-`gitleaks/gitleaks` pre-commit repo, pinned at `v8.18.4`) as a second,
-independent secret scanner alongside the always-on custom Node scanner in
-`.claude/hooks/lib.mjs` (`scanStagedForSecrets`, runs on every checkpoint
-commit with no setup required). Nothing needed to change here — this note
-just documents that B4's script-side requirement is already in place.
+## B8 — acceptance logging, by hand
 
-- **Action required (manual, GitHub settings):** enable **push protection**
-  for secret scanning on your vault's repo
-  (Settings → Code security and analysis → Secret scanning → Push
-  protection). This cannot be done from a script or from this vault's config
-  — it's a GitHub repo setting.
-- Local `pre-commit` framework install is optional and per-contributor:
-  `pip install pre-commit && pre-commit install`. It's defense-in-depth for
-  humans committing by hand; the Node scanner is what actually protects the
-  vault by default.
+A decision worth recording about an agent suggestion (a link, a merge, an
+archive) may get one `acceptance` or `rejection` line in the signal ledger,
+carrying `feature:` and `ref:`:
 
-## B5 — `weekly-maintenance.ps1`
+```
+node .claude/hooks/append-signal.mjs acceptance feature:link-suggestion ref:"[[x]] <-> [[y]]"
+```
 
-- **What:** runs `claude -p "/triage then /curator"` headless from the vault
-  root. `/triage` empties `inbox/` (48h rule); `/curator` consolidates and
-  applies safe fixes directly, but proposes destructive/structural changes as
-  a table rather than applying them (evolution decoupled from execution).
-  Lockfile-guarded via `lock.ps1`.
-- **When:** weekly.
-- **Output:** filed inbox + a proposal doc/table for you to review.
-- **Kill criterion:** approval backlog exceeding 1 week.
-- **Do not run ad hoc** — it spawns a real headless Claude Code session
-  against the live vault. Only meant to run unattended via Task Scheduler.
+This used to be the input of a computed acceptance rate fed by a proposals
+sweep; both were retired with proposal production (ADR 0038). The line
+survives as a convention for the skills and feeds nothing that scores them.
 
-## B6 — `daily3-resurface.mjs`
+## B11 — `retrieval-eval.mjs`
 
-- **What:** picks 3 notes from `knowledge/`, `_brain/memory/`, and
-  `projects/` by weighted random selection — weight = days since
-  `last_surfaced` (frontmatter; falls back to file mtime) + a link-sparsity
-  bonus (favors under-linked notes) + jitter — excluding anything modified in
-  the last 7 days. Appends a `## Resurfaced` section with the 3 picks (as
-  wikilinks) to today's daily note (`daily/YYYY-MM-DD.md`, created from
-  `_brain/templates/daily.md` if missing), then sets/updates
-  `last_surfaced: YYYY-MM-DD` in each picked note's frontmatter without
-  touching any other key. Supports `--dry-run` (prints picks, writes
-  nothing). Lockfile-guarded.
-- **When:** daily.
-- **Output:** 3 links appended to today's daily note.
-- **Kill criterion:** resurfaced notes ignored for 2+ weeks — if nobody's
-  clicking through, the selection weighting or the whole job needs to change.
+- **What:** ranks `notes/` + `core/` by unique, case- and accent-folded
+  query-token overlap and re-runs the `query → expected note` pairs in
+  `.claude/eval/golden-set.md`, reporting recall@1/@3/@5 plus every miss.
+  `--query "<terms>"` is the ranked lookup `/recall` runs first.
+  `--ranker legacy` keeps the older frequency-weighted scorer; `--ranker
+  compare` prints both with the promotion gate the default had to pass.
+- **When:** from `/audit`, and ad hoc:
+  `node scripts/retrieval-eval.mjs [--verbose]`.
+- **Output:** Markdown on stdout. Exits 0 always — a failing row is a finding,
+  not a broken build.
+- **What it does not measure:** whether a session answered anything correctly.
+  Recall also drifts down as the corpus grows, because more notes match the
+  same terms — competition, not rot.
+- **Kill criterion:** if every miss for two consecutive months is fixed by an
+  `aliases:` entry, the golden set is measuring vocabulary, not retrieval —
+  shrink it. If misses cluster on `paraphrase-miss`, that is the evidence ADR
+  0018 asked for.
 
-## Manual steps for you
+## B15 — `brain-doctor.mjs`
 
-1. **Set the off-site bundle destination.** Set the `SECOND_BRAIN_BUNDLE_DIR`
-   environment variable (System Properties → Environment Variables, or
-   `setx SECOND_BRAIN_BUNDLE_DIR "E:\your\real\path"`) to a real second
-   location before B3 runs for real. See B3 above.
-2. **Enable GitHub push protection** on your vault's repo (repo Settings →
-   Code security and analysis) — see B4 above. Not doable from a script.
-3. **Register the scheduled tasks.** Review `register-tasks.ps1`, then run it
-   yourself:
-   `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\register-tasks.ps1`
-   Nothing in this repo runs it for you — that's deliberate. It registers 5
-   Windows Task Scheduler entries under `\SecondBrain\` (B1, B2, B3, B5 daily/
-   weekly as documented above, B6 daily).
-4. **B9 — rotate to a fine-grained PAT.** Replace any classic GitHub PAT used
-   by this vault's automation with a
-   **fine-grained personal access token scoped to one repo
-   (`<your-github-user>/<your-vault-repo>`) with Contents read/write only**
-   — no other repos, no other permissions. Retire the classic PAT afterwards
-   (GitHub → Settings → Developer settings → Personal access tokens →
-   Tokens (classic) → Delete). This is a one-time credential change you must
-   do by hand in GitHub and wherever the token is stored locally — never put
-   a token in vault content or in these scripts.
+- **What:** one read-only table over the brain path of both runtimes: exactly
+  one SessionStart per runtime (project scope or global mode, never both), no
+  retired v1.0 git-writing hook still wired, the `.claude/skills` link,
+  Tier-0 budgets, the last recorded session-start payload, `/recall`'s
+  resources, the current retrieval score, top-level entries against the
+  `AGENTS.md` folder map, and Git delivery state.
+- **When:** after setup, after changing hook wiring, after upgrading, or when
+  memory loading is suspected: `node scripts/brain-doctor.mjs`. `--json` for
+  tooling, `--strict` to exit 1 on any failure.
+- **Output:** stdout only. It never repairs, stages, commits, writes a report,
+  or updates a sidecar.
+- **Kill criterion:** if two runtime investigations in a row still have to open
+  the underlying files because this table cannot localize the fault, remove it
+  rather than grow it into a dashboard.
 
-## B8 — acceptance-logging convention
+## `vault-metrics.mjs`
 
-Every agent suggestion that a human accepts or rejects (a link suggestion, an
-MOC proposal, an "unexpected pair", a curator-proposed merge/archive/delete,
-etc.) gets one line logged to `_brain/logs/` recording the suggestion and
-whether it was accepted or rejected. This is a **convention for the agent
-skills to follow** (`/triage`, `/curator`, and any future thinking-partner
-feature), not a script — there's nothing here to run. The resulting
-accept/reject data is the master metric: suggestion acceptance rate is what
-tells you whether a thinking-partner feature is earning its keep or just
-adding noise. Log format: a bullet in the relevant session log or a dedicated
-`_brain/logs/YYYY-MM-DD_acceptance.md`, e.g.
-`- [accepted] link suggestion: [[knowledge/x]] <-> [[knowledge/y]] (curator, 2026-08-19)`.
+- **What:** deterministic counts from the signal ledger and `notes/` — check
+  fires by month, correction recurrence by class, retrieval failures by cause,
+  and lesson and check survival. It counts and dates; it draws no conclusions.
+  Named `flywheel-metrics.mjs` until the reference instance retired the
+  sections that scored suggestions and note re-use (ADR 0038, 0039).
+- **When:** from `/audit`, or ad hoc: `node scripts/vault-metrics.mjs`.
+- **Kill criterion:** if an audit stops reading it, drop it.
+
+## `tests/index-coverage.test.mjs`
+
+Regression test for the two INDEX-coverage instruments — the `index-coverage`
+check in `.claude/hooks/checks.mjs` and the git-blind sweep in
+`link-sweep.mjs` — against a throwaway repo in the system temp directory:
+`node scripts/tests/index-coverage.test.mjs`. Exits 1 on a failure.
+
+## Retired — kept here so nobody re-adds them by accident
+
+| Job | Retired | Why |
+|---|---|---|
+| Stop / SessionEnd / PreCompact checkpoint commit (`checkpoint.mjs`, `session-end.mjs`) | v1.1 | A whole-tree `git add -A` takes another task's half-written files with it once two sessions share a checkout (ADR 0042, 0044) |
+| Session flush (`flush.mjs`) | v1.1 | Reconstructed a missing session log from the transcript; in the reference instance it failed 779 times in a row unnoticed (ADR 0038) |
+| Reuse telemetry (`reuse-telemetry.mjs`, `--rollup`) | v1.1 | Counted that a note was opened, never that opening it helped; informed no decision (ADR 0039) |
+| Proposals sweep (`proposals.mjs`), `/flywheel`, the acceptance rate | v1.1 | The queue aged instead of being answered (ADR 0038) |
+| Maintenance due line (`maintenance-stamp.mjs`) | v1.1 | Nothing is scheduled, so nothing is late (ADR 0038) |
+| Scheduled maintenance, off-site bundle, daily resurfacer | v1.0 | ADRs 0021, 0032, 0033 |

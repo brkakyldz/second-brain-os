@@ -18,11 +18,11 @@ tells you what it was protecting.
 | 0001 | accepted | Git is the only database — no SQLite, no vector store, no server |
 | 0002 | accepted | Vault-native Markdown is canonical memory; the assistant's built-in auto-memory stays local scratch |
 | 0003 | accepted | Five-way memory split with hard size budgets that fail loudly |
-| 0004 | accepted | Automation via SessionStart/Stop/SessionEnd/PreCompact hooks, in fail-open Node scripts |
+| 0004 | accepted | Automation via SessionStart/Stop/SessionEnd/PreCompact hooks, in fail-open Node scripts (since 0042/0044 only SessionStart remains) |
 | 0005 | superseded by 0034 | Mobile is read + quick-capture only; no mobile git write parity |
 | 0006 | accepted | Two repositories — public template, private personal brain. Personal data never enters the public one |
 | 0007 | accepted | Agent-first installation — the agent installs the brain from the repo link |
-| 0008 | accepted | Global brain mode — hooks live at user level, the brain follows you into every project |
+| 0008 | superseded by 0042 | Global brain mode — hooks live at user level, the brain follows you into every project (the global SessionStart survives in 0042/0044) |
 | 0009 | accepted | The installer offers global mode as the recommended choice |
 | 0010 | superseded by 0018 | Hybrid retrieval as a derived index — lexical first, vectors on a named trigger |
 | 0011 | accepted | Enforcement-first memory gates — scoped PreToolUse denial alongside fail-open automation |
@@ -33,15 +33,15 @@ tells you what it was protecting.
 | 0016 | accepted | The working record lives in the private vault, not the template |
 | 0017 | accepted | The reporting contract is a global standard, not a vault-local habit |
 | 0018 | accepted | Retrieval is lexical + links + conventions; a retrieval-failure ledger is the only trigger to revisit it |
-| 0019 | accepted | The flywheel is capture → corroborate → enforce-or-retire; the escalation ladder is the mechanism |
+| 0019 | amended by 0038 | The flywheel is capture → corroborate → enforce-or-retire; the escalation ladder is the mechanism |
 | 0020 | accepted | One append-only signal ledger plus a machine-written session trace |
 | 0021 | accepted | No off-site git bundle job — the local clone plus the remote are the backup |
 | 0022 | accepted | Seed checks compile standing conventions into enforced rules |
 | 0023 | accepted | The PreToolUse write gate is reinstated, scoped to vault paths and the control plane |
-| 0024 | accepted | Instrument what the policy claims to measure — reuse sidecar, rollup, caused retrieval failures, computed acceptance rate |
-| 0025 | accepted | The session log gets a mechanism — transcript flush on SessionEnd, swept at SessionStart |
-| 0026 | accepted | One approval surface (`PROPOSALS.md`); resurfacing is question-framed and inbound-poor |
-| 0027 | accepted | Stop checkpoints skip trace-only commits and debounce the push |
+| 0024 | accepted | Instrument what the policy claims to measure — reuse sidecar, rollup, caused retrieval failures, computed acceptance rate (amended by 0038, 0039) |
+| 0025 | superseded by 0038 | The session log gets a mechanism — transcript flush on SessionEnd, swept at SessionStart |
+| 0026 | accepted | One approval surface (`PROPOSALS.md`); resurfacing is question-framed and inbound-poor (proposal production retired by 0038) |
+| 0027 | superseded by 0042 | Stop checkpoints skip trace-only commits and debounce the push |
 | 0028 | accepted | The archive is flat — no subtree structure inside `archive/` |
 | 0029 | accepted | This template is re-derived from the vault; the old `_brain/` layout is retired |
 | 0030 | accepted | Tier-0 budgets are counted in characters and shown to the agent up front |
@@ -49,6 +49,15 @@ tells you what it was protecting.
 | 0033 | accepted | Unattended scheduled maintenance retired — the trigger becomes session start |
 | 0034 | accepted | The capture inbox and every mobile-capture plan are removed |
 | 0035 | accepted | A `raw/` source layer, `/ingest` to read a source into the wiki, `/file` to keep an answer, and `INDEX.md` as the page catalog (amends 0002 and 0034) |
+| 0036 | accepted | Template v1.0 published ahead of the two-week bar; the bar governs additions, never removals |
+| 0037 | amended by 0040 | The owner's own-notes folder is structured into kind folders *(reference instance only — that folder does not ship here)* |
+| 0038 | accepted | The flush mechanism and proposal production are removed; delivery, notices and measurement are made truthful (supersedes 0025) |
+| 0039 | accepted | The notes earn their keep, the instrumentation does not — reuse telemetry is retired |
+| 0040 | accepted | The own-notes folder goes flat again; `kind:` is the only classifier *(reference instance only)* |
+| 0041 | accepted | `raw/` admits one named automatic writer, a video-transcript pipeline *(reference instance only — here `raw/` has no automatic writer)* |
+| 0042 | accepted | Vault commits are task-owned: no hook stages or commits the whole tree; one user-level SessionStart per runtime (supersedes 0008, 0027) |
+| 0043 | accepted | A research report that crowds out retrieval is kept as an archived snapshot plus a short live distillation (amends 0035) |
+| 0044 | accepted | Claude Code and Codex are equal runtimes over one kit — `AGENTS.md` is the constitution, `.agents/skills/` the one skills copy (amends 0042) |
 
 There is no 0031: the number was allocated to a decision that was abandoned
 before it was written. Gaps are left in place rather than renumbered — a

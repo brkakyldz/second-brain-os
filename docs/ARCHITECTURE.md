@@ -1,15 +1,17 @@
 # Architecture
 
 A file-native agent memory system: plain Markdown as the substrate, git as the
-database, Claude Code hooks as the runtime, and an explicit lifecycle policy as
-the thing that keeps it from rotting. No index server, no vector store, no
-tool-internal format.
+database, Claude Code and Codex as two equal runtimes over the same files, and
+an explicit lifecycle policy as the thing that keeps it from rotting. Each
+durable piece has one source that both runtimes point at (ADR 0044). No index
+server, no vector store, no tool-internal format.
 
 **Scope of this document: mechanism.** What the parts are and how they fit. The
-*policy* they enforce is `notes/lifecycle-policy.md`; the *binding rules* are
-`CLAUDE.md`; the *decisions* behind both are indexed in `DECISIONS.md`. Those
-have non-overlapping charters on purpose — a rule stated in two places is a
-contradiction waiting for one of them to be edited.
+*policy* they enforce is `notes/lifecycle-policy.md` (what happens to a note)
+and `notes/self-evolution-policy.md` (how the system changes itself); the
+*binding rules* are `AGENTS.md`; the *decisions* behind all of them are indexed
+in `DECISIONS.md`. Those have non-overlapping charters on purpose — a rule
+stated in two places is a contradiction waiting for one of them to be edited.
 
 ## 1. Design premises
 
@@ -27,28 +29,44 @@ Four constraints drive every other decision:
 4. **Fail-open automation.** No hook or script may block a working session.
    Every hook path exits 0.
 
-A fifth was added later, after the first four let ~5,400 lines of machinery
-accumulate around 17 notes: **machine state does not live on the tracked tree.**
-A counter a hook ticks every turn is not evidence, and storing it as evidence
-costs a commit, a lock acquisition and a Markdown parse per turn. Derived,
-rebuild-tolerant state goes in a gitignored sidecar.
+Two more were added by what went wrong:
+
+5. **Machine state does not live on the tracked tree** (ADR 0032). The first
+   four let ~5,400 lines of machinery accumulate around 17 notes; a counter a
+   hook ticks every turn is not evidence. Derived, rebuild-tolerant state goes
+   in a gitignored sidecar.
+6. **Commits belong to the task that wrote the files** (ADR 0042, 0044). Two
+   runtimes — or two sessions of one — can work in one checkout at the same
+   time, and a hook cannot know which dirty file belongs to which task. So no
+   hook commits, and nothing ever stages the whole tree.
 
 ## 2. Layers
 
 ```
   Obsidian (human read/write)  ---+
                                   +-- plain .md files -- git -- remote
-  Claude Code (agent read/write) -+       (substrate)    (db)   (sync)
+  Claude Code / Codex (agents) ---+       (substrate)    (db)   (sync)
         |
-        +-- hooks/     deterministic runtime (session lifecycle)
-        +-- skills/    judgment procedures (/ingest, /curator, /flywheel …)
-        +-- scripts/   deterministic maintenance (by hand or from a skill)
+        +-- AGENTS.md   the constitution; CLAUDE.md only imports it
+        +-- .agents/    judgment procedures (/ingest, /curator, /lesson …) — the
+        |               one skills copy; .claude/skills is a link to it
+        +-- .claude/    shared hook implementation, note templates, eval set
+        +-- .codex/     thin Codex SessionStart adapter
+        +-- scripts/    deterministic maintenance (by hand or from a skill)
 ```
 
-The split between the last three is the core engineering rule: **deterministic
-work is a script, judgment work is an LLM call.** Link checking and metric
-rollups are scripts because they have a correct answer. Deciding whether two
-facts are the same fact is a skill because it does not.
+The split between skills, hooks and scripts is the core engineering rule:
+**deterministic work is a script, judgment work is an LLM call.** Link checking
+and metric counts are scripts because they have a correct answer. Deciding
+whether two facts are the same fact is a skill because it does not.
+
+**One source per piece.** Codex cannot import a file and reads `AGENTS.md` and
+`.agents/skills/` natively; Claude Code reads `CLAUDE.md` (which is one
+`@AGENTS.md` import plus Claude-only lines) and `.claude/skills`, which
+`install.mjs` makes a directory junction (Windows) or symlink (macOS/Linux) to
+`.agents/skills/`. The link is gitignored machine state — a copy would be two
+live implementations, and in the reference instance two copies drifted both
+ways within a week.
 
 ## 3. Storage model
 
@@ -56,7 +74,7 @@ facts are the same fact is a skill because it does not.
 |---|---|---|---|
 | `logs/` | Episodic — what happened | append-only | distill → `archive/` |
 | `core/MEMORY.md`, `notes/` (`memory` / `knowledge`) | Semantic — what is true | reconcile on write | supersede → archive |
-| `notes/` (`playbook`), `.claude/skills/` | Procedural — how we work | deliberate revision | replace whole sections |
+| `notes/` (`playbook`), `.agents/skills/` | Procedural — how we work | deliberate revision | replace whole sections |
 | `raw/` | Evidence — what a source said | write-once, by the human | never; a source is permanent |
 | `.claude/*.json` sidecars | Derived machine state | overwrite, lock-free | discarded; never committed |
 
@@ -70,25 +88,37 @@ verbatim" enforceable rather than aspirational — without a legal home, a quote
 paragraph either gets paraphrased into a note (losing the fidelity that made it
 worth keeping) or is lost.
 
+A long research report that crowds out retrieval may be split in two: a
+byte-identical, date-prefixed snapshot in `archive/` that owns the sources and
+the detail, and a short live note of the same name in `notes/` that holds the
+conclusion (ADR 0043).
+
 ## 4. Retrieval: tiers, not search
 
 - **Tier 0 — always loaded.** `IDENTITY.md` (40 lines), `USER.md` (2000 chars),
-  `MEMORY.md` (4000 chars). Injected into every session by the SessionStart
-  hook, which also prints each file's usage against its budget so the agent sees
-  its remaining room *before* writing. `MEMORY.md` holds **pointers, never
-  detail**: one fact per line, ending in a `[[wikilink]]`.
+  `MEMORY.md` (4000 chars) inside the vault; `USER.md` and `MEMORY.md` only in
+  any other project. Injected by the SessionStart hook, which heads each file
+  with its usage against its budget so the agent sees its remaining room
+  *before* writing. `MEMORY.md` holds **pointers, never detail**: one fact per
+  line, ending in a `[[wikilink]]`. `OPEN_QUESTIONS.md` gets a pointer, not
+  its content.
 - **Tier 1 — the catalog, then the page.** `INDEX.md` lists every note in one
-  line each. Read it, pick the two or three pages that matter, open those. This
-  is the cheap half of retrieval and the reason no search index has been needed.
+  line each. Read it, pick the two or three pages that matter, open those.
+  `node scripts/retrieval-eval.mjs --query "…"` ranks `notes/` + `core/` by
+  query-token overlap when the catalog is not enough.
 - **Tier 2 — grep and the episodic stream.** `logs/` and full-text search, when
   the first two don't answer.
 - **`archive/` is not a tier below these** — it is live evidence at Tier 1
   depth. Superseded decisions are meant to be read before an expensive new one.
 
-The budgets are mechanism, not decoration: past ~10KB of session-start payload
-the harness stops inlining Tier 0 at all, so a budget overrun does not degrade
-attention gracefully — it turns the always-loaded tier off. Over budget, the
-rule is **consolidate, never silently truncate**.
+The budgets are mechanism, not decoration: past roughly 10KB of session-start
+payload the harness is believed to stop inlining Tier 0 at all, so a budget
+overrun does not degrade attention gracefully — it turns the always-loaded tier
+off. That threshold is a hypothesis, so the hook logs its measured payload size
+on every run and, over the limit, drops optional sections whole before any
+Tier-0 content. Over budget, the rule is **consolidate, never silently
+truncate**. Writer-only HTML comments are stripped before injection, so the
+text that is counted and the text that is delivered are the same text.
 
 Why there is no vector index: it was measured, not assumed. A golden set of 52
 queries against the reference instance found zero paraphrase-misses — every
@@ -97,62 +127,74 @@ language's inflection), whose remedy is an `aliases:` line, not an embedding.
 `scripts/retrieval-eval.mjs` re-runs `.claude/eval/golden-set.md` so that
 finding stays falsifiable, and the trigger to revisit is written down.
 
-## 5. Runtime: the hooks
+## 5. Runtime: two runtimes, one hook each
 
-Registered either in the vault's `.claude/settings.json` (project scope) or in
-`~/.claude/settings.json` (global mode). Each script resolves the vault root
-from its own file location, so the same script is correct from any working
-directory.
+Claude Code and Codex are equal (ADR 0044). Each has exactly one brain
+SessionStart, and both land in the same implementation:
 
-| Event | Script | Job |
-|---|---|---|
-| `SessionStart` | `session-start.mjs` | `git pull --rebase --autostash`, inject Tier 0 with budget meters, sweep any session still owed a flush |
-| `Stop` | `checkpoint.mjs` | tick the session trace, run the compiled checks, checkpoint-commit — bounds worst-case data loss to **one turn** |
-| `PreCompact` | `checkpoint.mjs` | the same, before context is compacted away |
-| `SessionEnd` | `session-end.mjs` | trace backstop, weekly reuse rollup if due, final commit with a shorter push timeout, then spawn the flush |
-| `PostToolUse` (`Read`/`Grep`/`Glob`) | `reuse-telemetry.mjs` | count one (note, session) pair into the reuse sidecar |
-| detached | `flush.mjs` | reconstruct a session log from the transcript when the agent ended without writing one |
+- **Claude Code:** `.claude/settings.json` (project scope, the default) or
+  `~/.claude/settings.json` (global mode) → `.claude/hooks/session-start.mjs`
+  directly; Claude supplies `CLAUDE_PROJECT_DIR`. Never both, or it fires twice.
+- **Codex:** `~/.codex/hooks.json` → `.codex/hooks/session-start.mjs`, which sets
+  `BRAIN_DIR` and `CLAUDE_PROJECT_DIR` and imports the same file. Not also in a
+  project-level `.codex/hooks.json`: Codex adds hook layers together.
+
+Every script resolves the vault root from its own location (or `BRAIN_DIR`), so
+the same file is correct from any working directory, in any clone.
+
+| Event | Job (both runtimes) |
+|---|---|
+| `SessionStart` | Skip if `core/.vault-active` is missing. Otherwise `git pull --rebase` — skipped when tracked changes exist, because they belong to a live task — then inject Tier 0 with budget meters and, at most, one notice about unpushed commits |
+| `Stop` / `SessionEnd` / `PreCompact` | Nothing. The task stages and commits only its own explicit paths |
 
 Design notes worth keeping:
 
-- **The Stop checkpoint is the backbone; SessionEnd is a bonus.** SessionEnd is
-  unreliable on real OS session close, so nothing depends on it.
-- **Push failure is non-fatal.** The commit stays local and syncs next time.
-- **Guards before writing.** `lib.mjs` runs a staged-file secret scan and a
-  Tier-0 budget check on every checkpoint commit, plus a second independent
-  scanner (`gitleaks`) via pre-commit.
+- **Task-owned commits are the backbone.** A task stages exact paths and
+  commits one coherent change; no hook infers ownership. The price is stated
+  plainly: a session that dies before committing leaves its files uncommitted
+  until someone picks them up, and there is no one-turn checkpoint any more.
+- **No autostash.** The pull used to lift uncommitted changes off the disk and
+  put them back; when the put-back failed, another task's files were stranded
+  in a stash while their owner kept working. A skipped pull costs one stale
+  session start; the vault still loads from disk.
+- **Push failure is non-fatal.** The commit stays local; the next session start
+  says so once a backlog is over a day old.
 - **A stuck rebase is aborted, not left half-applied.**
-- **Two sidecars, both gitignored, both lock-free.** `.claude/.access.json`
-  buffers reuse counts until the rollup folds them into one durable ledger line;
-  `.claude/.sessions.json` holds the per-session turn counter the flush reads.
-  Losing either is bounded — the durable half of each record is a ledger line.
-- **Flush is serialized by an exclusive claim file**, not by a check. A check
-  cannot serialize work that outlives the gap between spawns; that bug produced
-  three identical digests for one session before it was fixed this way.
+- **One sidecar, gitignored and lock-free:** `.claude/.maintenance.json`, the
+  shared daily notice counter. The session-trace and access sidecars went with
+  the flush and telemetry hooks (ADR 0038, 0039).
 
 ## 6. What the runtime enforces
 
-Only the parts of the policy that exist as code belong here; the policy itself
-is `notes/lifecycle-policy.md`.
+Only the parts of the policy that exist as running code belong here.
 
-- **Compiled checks** (`.claude/hooks/checks.mjs`) run from the checkpoint path,
-  warn-first, each fire deduplicated per (check, file, detail) per month into the
-  signal ledger. Four ship: wikilink short form, note frontmatter conventions,
-  an uncaptured correction, and `INDEX.md` coverage.
-- **Tier-0 budgets** are measured on every checkpoint and shown at session start.
-- **Protected files.** `IDENTITY.md` and `CLAUDE.md` are never edited by an
-  automated pass; agents propose a diff into `PROPOSALS.md`, the owner applies it.
-- **Secret scanning** on every staged commit, twice, by two independent tools.
+- **SessionStart** enforces the activation marker, attempts the pull, measures
+  Tier-0 budgets and injects the bounded context.
+- **The daily notice budget** — three proactive items across every surface, one
+  shared counter (`emitNotices` in `lib.mjs`); a backup failure outranks
+  everything in it.
+- **`brain-doctor.mjs`** reports, read-only, whether each runtime has exactly
+  one SessionStart and no retired git-writing hook, whether the skills link
+  resolves, and whether the budgets hold.
+
+Written as code but **not run automatically** since v1.1:
+
+- **Compiled checks** (`.claude/hooks/checks.mjs`) — wikilink short form, note
+  frontmatter, `INDEX.md` coverage. They ran from the Stop checkpoint; with the
+  checkpoint gone they are reusable code a task may call before its own commit.
+  `link-sweep.mjs` carries a git-blind twin of the index-coverage check.
+- **The secret scanner** (`scanStagedForSecrets` in `lib.mjs`). The scan that
+  runs, once you install it, is gitleaks via `.pre-commit-config.yaml`.
 
 Everything else — the corroboration gate, bi-temporal supersession, the maturity
-ladder, archive-vs-delete — is enforced by convention and by the maintenance
-passes the owner runs, not by code. That distinction is worth keeping honest,
-and there is a measurement behind it: TRACE (arXiv 2606.13174) found prose
-corrections re-violated **57.5%** of the time against 2–38% for a compiled
-check. Telling a model its mistake in writing does not stick. This is the
-single most load-bearing finding in the research this system was built on, and
-the flywheel exists to move checkable rules out of prose and into the list
-above.
+ladder, archive-vs-delete, the protected files — is enforced by convention and
+by the passes the owner runs. **Protected files are a convention, not a
+security boundary**: nothing stops a shell command from writing `AGENTS.md`. That
+distinction is worth keeping honest, and there is a measurement behind it:
+TRACE (arXiv 2606.13174) found prose corrections re-violated **57.5%** of the
+time against 2–38% for a compiled check. Telling a model its mistake in writing
+does not stick — which is why the checks are kept as code even while nothing
+runs them on every turn.
 
 ## 7. The ingestion paths
 
@@ -175,7 +217,7 @@ a rule, which is why it is drawn rather than described.
         v                                       v
   notes/<topic>.md  <-------------------------- +   semantic, confidence: low,
         |                                            source: on anything external
-        |  corroboration gate: a second independent session confirms it
+        |  corroboration gate: a second independent source confirms it
         v
   core/MEMORY.md          one pointer line, Tier 0, 4000 chars
 ```
@@ -183,12 +225,13 @@ a rule, which is why it is drawn rather than described.
 Three properties are deliberate:
 
 - **Only distillate travels upward.** The vault stores summaries, decisions and
-  their reasons, never raw transcripts — those stay in Claude Code's own session
-  storage. `raw/` is the exception that proves it: sources stay verbatim
-  *because* they are outside the wiki.
+  their reasons, never raw transcripts — those stay in the runtime's own
+  session storage. `raw/` is the exception that proves it: sources stay
+  verbatim *because* they are outside the wiki.
 - **Promotion is asynchronous.** A session writes episodic content immediately,
-  but a fact becomes always-loaded memory only after a curator pass and a second
-  independent confirmation.
+  but a fact becomes always-loaded memory only after a curator pass and a
+  second, independent confirmation — independence being a property of the
+  source, not a count of sessions.
 - **A source is never memory on its own.** Anything from `raw/` carries
   `source:`, enters at `confidence: low`, and is closed out of `USER.md` and
   `IDENTITY.md` entirely. One document asserting something is not the vault
@@ -199,47 +242,49 @@ Three properties are deliberate:
 - **No semantic search.** Retrieval is catalog + pointers + grep + wikilinks.
   Fine at single-vault scale and it keeps the substrate portable; revisit when
   the retrieval-failure ledger says so, not before.
-- **Single-writer assumption.** Concurrent scripts share one lockfile
-  (`scripts/.brain.lock`, stale after 2h); the per-turn hooks were moved *off*
-  that lock rather than made to queue on it. Real multi-device concurrent
-  editing would need more than either.
-- **Checkpoint commits outnumber content commits.** Bounding data loss to one
-  turn means committing whenever a turn changed something. That is the intended
-  trade, but `git log` reads as machine noise until you filter it.
+- **Task-owned commits trade automatic recovery for ownership.** An interrupted
+  task may leave a dirty tree until it resumes; the gain is that concurrent
+  tasks cannot be swept into one another's commits. The session-log rule is
+  the agent's to follow — no hook reconstructs a log it forgot to write.
+- **Single-writer assumption for scripts.** The lockfile
+  (`scripts/.brain.lock`, stale after 2h) serializes the pull and ledger
+  appends; real multi-device concurrent editing would need more than that.
+- **The Windows skills junction stores an absolute path.** Move the vault
+  folder and the link breaks; `node install.mjs --link-skills` repairs it and
+  `brain-doctor.mjs` reports it.
 - **The policy is only as good as its enforcement.** Anything enforced only by
-  prose will drift; §6 lists what is not prose.
+  prose will drift; §6 lists what is code and what is not.
 - **The machinery can outgrow the content.** Measured once at ~5,400 lines of
-  hooks and scripts against 17 notes. The growth-control rule that governs
-  folders and tags had never been applied to hooks and scripts, which is exactly
-  how that happened. It now is — a new hook needs a failure that demanded it.
+  hooks and scripts against 17 notes. A new hook or script now needs a failure
+  that demanded it, the same gate a new folder faces.
 - **`raw/` can become a graveyard.** Files land, nothing ingests them. The
   symptom is visible (an un-ingested file appears in no index and no note) and
   the response is written down in advance: three weeks of that means the inlet
   isn't wanted, and it gets removed rather than nagged about.
 
-## 9. The flywheel
+## 9. From correction to check
 
-Capture → corroborate → enforce-or-retire.
+Capture → corroborate → enforce-or-retire (ADR 0019, amended by 0038).
 
 `/lesson` captures a correction verbatim into `notes/lesson-*.md` plus a
 `correction` signal, with **no interpretation at capture time** — agents
 confabulate their own failure stories, so the agent never authors the lesson in
 the same session it earned.
 
-`/flywheel` runs when the owner starts it, mines the ledger, corroborates repeat
-classes, and proposes each as either a compiled check or a prose line —
-proposals only, per the protected-files rule.
+The corroborate-and-route half used to be a `/flywheel` pass that mined the
+ledger and proposed checks into an approval queue. It was retired with proposal
+production (ADR 0038): a lesson becomes a compiled check because the owner
+decides it should, not because a pass proposed it. `scripts/vault-metrics.mjs`
+is the deterministic count that informs that decision — check fires,
+correction recurrence by class, lesson and check survival — with no LLM call
+anywhere in it.
 
 `/recall` is the four-layer lexical retrieval procedure, and it logs a
 `retrieval-failure` signal with a cause when the vault misses. That signal is
 the only thing that can reverse the no-vector-index decision.
 
-`scripts/flywheel-metrics.mjs` is the deterministic measure step — fire counts,
-prune candidates, correction recurrence, 30-day lesson survival, and the
-note-reuse table — with no LLM call anywhere in it.
-
-The seed checks were bootstrapped from standing `CLAUDE.md` conventions rather
-than waiting for organic corroboration. That shortcut has a cost worth knowing:
-a check that never fires cannot be distinguished from a check that *cannot*
-fire, so a check earns its place by catching a synthetic offender, not by
-staying quiet.
+The seed checks were bootstrapped from standing constitution rules rather than
+waiting for organic corroboration. That shortcut has a cost worth knowing: a
+check that never fires cannot be distinguished from a check that *cannot* fire,
+so a check earns its place by catching a synthetic offender, not by staying
+quiet.

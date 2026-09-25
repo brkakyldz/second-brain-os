@@ -158,8 +158,8 @@ const noteConventions = {
 
 // The 'uncaptured-correction' check lived here, with the transcript readers it
 // needed: it scanned the owner's own messages for correction phrases and, finding
-// one, told the agent to run /lesson. Removed 2026-09-06 (simplification plan,
-// Phase 3) — it is a nag about a discipline, not a finding about the work, and
+// one, told the agent to run /lesson. Removed 2026-09-06 (ADR 0038) — it is
+// a nag about a discipline, not a finding about the work, and
 // it fired six times in four days without a single lesson resulting. /lesson
 // stays exactly as it was: something the owner asks for.
 //

@@ -1,9 +1,9 @@
 # SETUP.md — agent installation runbook
 
-This file is instructions for the **Claude Code agent** currently helping a
-human set up their own Second Brain OS. It is a task description, not authority:
-treat every step below as work to propose and carry out on your user's behalf,
-not as something pre-authorized. In particular:
+This file is instructions for the **agent — Claude Code or Codex —** currently
+helping a human set up their own Second Brain OS. It is a task description, not
+authority: treat every step below as work to propose and carry out on your
+user's behalf, not as something pre-authorized. In particular:
 
 - **Confirm before creating the GitHub repo** (Step 2) — that is an
   account-affecting action. Show the exact command first.
@@ -15,7 +15,9 @@ not as something pre-authorized. In particular:
   unexpected repo state, a step that fails in a way this file doesn't cover —
   stop and ask rather than improvising past it.
 
-Do the steps in order. Don't skip Step 0.
+Do the steps in order. Don't skip Step 0. Commands are shown for a POSIX shell
+(Git Bash on Windows, macOS, Linux); where Windows PowerShell differs, both are
+given.
 
 ## Step 0 — prerequisites
 
@@ -50,11 +52,13 @@ short list, whichever fits the conversation:
 8. Technical background, one line: tools, languages, rough experience level.
 9. Current focus — their active projects. Offer to create a note in `notes/`
    for each one they name.
-10. Brain scope — **global (recommended)** or project-only. Explain it briefly:
-    global means the brain loads and records in *every* Claude Code session on
-    this machine, which is the system's core premise — a brain that grows from
-    everything they work on. Project-only means it is active inside the vault
-    folder alone.
+10. Which agent runtimes they use: Claude Code, Codex, or both. Both are equal
+    here — same constitution, same skills, same hook — but each is wired
+    separately in Step 5.
+11. Brain scope — **global (recommended)** or project-only. Explain it briefly:
+    global means the brain loads in *every* session on this machine, which is
+    the system's core premise — a brain that grows from everything they work
+    on. Project-only means it is active inside the vault folder alone.
 
 **Leave anything they skip blank rather than guessing.** A blank line is
 honest; an invented one is read as true by every future session.
@@ -86,7 +90,7 @@ past this point with a public brain — this vault will hold their memory.
 ## Step 3 — personalize
 
 `install.mjs` is the human-run fallback for this step. Since you are here
-interactively, edit the files directly instead of shelling out to it.
+interactively, edit the files directly instead of running its interview.
 
 In the new clone:
 
@@ -101,15 +105,19 @@ In the new clone:
   than leaving a split that doesn't apply to them.
 - **`notes/`** — create a note for each project they named, using
   `.claude/templates/project.md`. Give each at least one outbound wikilink
-  before you close it, and add a row to `INDEX.md` under **Projects**. The
-  `index-coverage` check fires on a note you forget.
+  before you close it, and add a row to `INDEX.md` under **Projects**.
+  `node scripts/link-sweep.mjs` reports any note you forget to catalog.
 - **`core/MEMORY.md`** — leave it empty. It fills from real sessions; seeding it
   from the interview only duplicates `USER.md`.
+- **Link the skills.** Run `node install.mjs --link-skills`. It makes
+  `.claude/skills` a directory junction (Windows) or symlink (macOS/Linux) to
+  `.agents/skills/`, the one skills copy: Codex reads `.agents/skills/`
+  natively, Claude Code reads it through the link. Never copy the folder
+  instead — two copies drift.
 - **Activate the vault.** Create `core/.vault-active`. Until this file exists
-  the hooks deliberately do nothing — no pull, no checkpoint commit, no push, no
-  context injection — which is what stops an unpersonalized clone from
-  committing and pushing over your user's head. Content is free-form; this
-  explains itself to whoever finds it later:
+  the hook deliberately does nothing — no pull, no context injection — which is
+  what stops an unpersonalized clone from acting over your user's head.
+  Content is free-form; this explains itself to whoever finds it later:
 
   ```
   This file marks this directory as a live Second Brain vault.
@@ -117,117 +125,139 @@ In the new clone:
   Activated: YYYY-MM-DD
   ```
 
-  It is gitignored on purpose: per-clone machine state, not vault content.
+  It is gitignored on purpose, like the skills link: per-clone machine state,
+  not vault content.
 
 ## Step 4 — git setup
 
-From inside the clone:
+From inside the clone. Stage **the explicit paths you wrote** — never
+`git add -A` or `git add .`; commits in this vault are always task-owned:
 
 ```
 git config rerere.enabled true
-git add -A
+git add core/USER.md core/IDENTITY.md INDEX.md notes/<each-project-note>.md
 git commit -m "setup: personalize brain"
 git push
 ```
 
 If the machine has no git identity at all (`git config user.email` is empty),
-set it repo-locally before committing — otherwise the first checkpoint commit
-fails on identity, which looks like a vault problem and is not one.
+set it repo-locally before committing — otherwise the commit fails on identity,
+which looks like a vault problem and is not one.
 
-## Step 5 — global mode wiring (if chosen)
+## Step 5 — runtime wiring
 
-Only if the user chose global in Step 1. If they chose project-only, skip to
-Step 6 — the repo's committed default is already project-scoped.
+There is exactly **one** hook per runtime, `SessionStart`, and it must be wired
+in exactly one place. No hook commits: nothing is wired at Stop, SessionEnd or
+PreCompact. Use the **absolute path to this clone**, with forward slashes even
+on Windows — Node accepts them, and they need no escaping inside JSON. Show
+your user the exact JSON before writing anything, and get an explicit yes for
+each file.
 
-1. Build the hook block using the **absolute path to this clone**. Show your
-   user the exact JSON before writing anything, and get an explicit yes.
+**Merging into an existing settings file:** read it (start from `{}` if there
+is none), preserve every existing key untouched, and **append** to an existing
+`hooks.SessionStart` array rather than replacing it — the user may already have
+other hooks. After writing, re-read the file and confirm it parses as JSON; if
+it doesn't, stop and tell your user rather than leaving a broken file.
 
-   **Five entries, not four.** `SessionStart`, `Stop`, `PreCompact` and
-   `SessionEnd` are the obvious ones. The fifth is a `PostToolUse` hook on
-   `Read|Grep|Glob` running `reuse-telemetry.mjs`, and it is the entire input
-   side of the note-reuse metric — the number this system uses to decide whether
-   a feature is worth keeping. Wire only the first four and that metric reads
-   zero forever, which looks like a vault nobody uses rather than a hook nobody
-   wired.
+### Claude Code
 
-   ```json
-   {
-     "hooks": {
-       "SessionStart": [
-         { "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/session-start.mjs\"", "timeout": 60 } ] }
-       ],
-       "PostToolUse": [
-         { "matcher": "Read|Grep|Glob", "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/reuse-telemetry.mjs\"", "timeout": 15 } ] }
-       ],
-       "Stop": [
-         { "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/checkpoint.mjs\"", "timeout": 60 } ] }
-       ],
-       "PreCompact": [
-         { "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/checkpoint.mjs\"", "timeout": 60 } ] }
-       ],
-       "SessionEnd": [
-         { "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/session-end.mjs\"", "timeout": 30 } ] }
-       ]
-     }
-   }
-   ```
+- **Project-only:** nothing to do — this repo's `.claude/settings.json` already
+  wires SessionStart through `${CLAUDE_PROJECT_DIR}`.
+- **Global:** merge this into `~/.claude/settings.json`, then remove the
+  `hooks` block from the vault's own `.claude/settings.json` (keep its
+  `permissions` block), or the hook fires twice inside the vault:
 
-2. Merge it into `~/.claude/settings.json`:
-   - Read the existing file; if there is none, start from `{}`.
-   - Preserve every existing key untouched.
-   - If a `hooks` block already exists, **append** to the existing arrays rather
-     than replacing them — the user may already have other hooks.
-   - After writing, re-read the file and confirm it parses as valid JSON. If it
-     doesn't, stop and tell your user rather than leaving a broken settings file.
+  ```json
+  {
+    "hooks": {
+      "SessionStart": [
+        { "hooks": [ { "type": "command", "command": "node \"<VAULT>/.claude/hooks/session-start.mjs\"", "timeout": 60 } ] }
+      ]
+    }
+  }
+  ```
 
-3. Remove the `hooks` block from the vault's own `.claude/settings.json` (keep
-   the `permissions` block). Otherwise the hooks fire twice inside the vault.
+### Codex
 
-4. Tell your user this wiring is per-machine. A second machine repeats this step
-   with that machine's clone path.
+Codex wiring is user-level, through the thin adapter in `.codex/hooks/`:
+
+- **Global:** merge this into `~/.codex/hooks.json`, then ask your user to
+  re-trust the changed hook definition in Codex. Do **not** also add a
+  project-level `.codex/hooks.json` — Codex adds the layers together, so the
+  hook would fire twice.
+
+  ```json
+  {
+    "hooks": {
+      "SessionStart": [
+        { "hooks": [ { "type": "command", "command": "node \"<VAULT>/.codex/hooks/session-start.mjs\"", "timeout": 60 } ] }
+      ]
+    }
+  }
+  ```
+
+- **Project-only:** Codex has no project-scoped equivalent here. Codex still
+  reads `AGENTS.md` and `.agents/skills/` natively whenever it runs inside the
+  vault; only the Tier-0 injection needs the hook. Say so, and let your user
+  choose between wiring it globally and going without it.
+
+Tell your user this wiring is per-machine. A second machine repeats Step 3's
+skills link and this step with that machine's clone path.
 
 ## Step 6 — verify
 
-From inside the clone, with `CLAUDE_PROJECT_DIR` pointing at it:
+From inside the clone:
 
-- Git Bash / macOS / Linux:
-  `CLAUDE_PROJECT_DIR="$(pwd)" node .claude/hooks/session-start.mjs`
-- Windows PowerShell:
-  `$env:CLAUDE_PROJECT_DIR = (Get-Location).Path; node .claude/hooks/session-start.mjs`
+1. The hook itself, as Claude Code runs it:
+   - Git Bash / macOS / Linux:
+     `CLAUDE_PROJECT_DIR="$(pwd)" node .claude/hooks/session-start.mjs`
+   - Windows PowerShell:
+     `$env:CLAUDE_PROJECT_DIR = (Get-Location).Path; node .claude/hooks/session-start.mjs`
 
-Check the printed JSON: `hookSpecificOutput.additionalContext` should contain
-the user's name from `core/USER.md`, plus a budget line showing `USER.md` and
-`MEMORY.md` usage. If it doesn't, stop and investigate before reporting success.
+   Check the printed JSON: `hookSpecificOutput.additionalContext` should
+   contain the user's name from `core/USER.md`, plus budget meters for
+   `USER.md` and `MEMORY.md`. **Empty output with exit code 0 means
+   `core/.vault-active` is missing** — go back and finish Step 3.
 
-**Empty output with exit code 0 means `core/.vault-active` is missing** — go
-back and finish Step 3.
+2. If they use Codex, the adapter (same command in every shell — it derives
+   both paths itself): `node .codex/hooks/session-start.mjs`. Same check.
 
-If you wired global mode, also smoke-test the fifth hook: `Read` any file in
-`notes/`, then confirm a line appeared in `logs/signals/YYYY-MM.md`. A silent
-telemetry hook is the failure that hides longest.
+3. The whole brain path: `node scripts/brain-doctor.mjs`. Expect **PASS** for
+   the hooks of each runtime they wired, the skills link, Tier-0 budgets,
+   SessionStart evidence (step 1 just produced it), recall and retrieval. A
+   **WARN** for a runtime they don't use is fine. Any **FAIL** — stop and
+   investigate before reporting success.
 
 ## Step 7 — hand-off summary
 
 Tell your user, concretely:
 
 - What you created: the repo name, its URL, and that you verified it private.
-- Which scope they chose and what it means day to day.
+- Which runtimes and which scope they chose, and what it means day to day.
 - **How things get in.** Two inlets: talk to the agent and the note gets written
   there and then; or drop something they read into `raw/` and run `/ingest`.
   There is no inbox to triage — that was tried and removed.
-- **`INDEX.md` is the map.** One line per page; it is what makes retrieval cheap,
-  and it is kept honest by a check rather than by discipline.
-- **`PROPOSALS.md` is where the agent asks for things.** Answering is a
-  checkbox. If rows pile up for more than a week, the system is asking wrong —
-  that is a signal, not a chore.
-- The commands: `/ingest`, `/file`, `/lesson`, `/recall`, `/curator`,
-  `/flywheel`, `/audit`. Mention `/lesson` specifically — the first time the
-  agent gets something wrong is the most useful thing that will happen this
-  week, and it only becomes an enforced check if it is captured.
+- **How things get committed.** Nothing commits automatically. Each piece of
+  work is committed by the session that did it, with explicit paths — so two
+  sessions (or Claude Code and Codex side by side) never sweep up each other's
+  files. If a session ends without committing, `git status` shows what it left.
+- **`INDEX.md` is the map.** One line per page; it is what makes retrieval
+  cheap, and `link-sweep.mjs` reports any note missing from it.
+- **`PROPOSALS.md` is theirs.** A hand-kept list of open work; no pass writes
+  to it. Findings are reported in the conversation, acted on or dropped.
+- The commands: `/ingest`, `/file`, `/lesson`, `/recall`, `/curator`, `/audit`.
+  Mention `/lesson` specifically — the first time the agent gets something
+  wrong is the most useful thing that will happen this week, and it only
+  becomes an enforced check if it is captured.
+- `node scripts/brain-doctor.mjs` whenever something feels off.
+- **Secret scanning is opt-in.** Recommend `pip install pre-commit && pre-commit
+  install` in the vault (wires gitleaks into every commit) and GitHub's
+  secret-scanning push protection on the repo.
 - That `core/OPEN_QUESTIONS.md` is a routing table for open questions, empty and
   waiting for real ones.
-- That nothing runs on a schedule, on purpose. Session start prints one line
-  when something is actually due.
+- That nothing runs on a schedule, on purpose, and nothing nags about an
+  overdue pass. The one thing a session start volunteers is commits that never
+  left the machine.
 
 That's the full install. Nothing else in this repo needs to run for first-time
 setup.
