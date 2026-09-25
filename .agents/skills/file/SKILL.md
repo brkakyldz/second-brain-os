@@ -76,8 +76,15 @@ wiki page are different artifacts:
 ### 4. Frontmatter
 
 `.claude/templates/knowledge.md` for a new page. `status: seedling` unless it
-has already been used in real work. Date anything perishable. If the analysis
-rests on an external source, `source:` is mandatory and carries through.
+has already been used in real work. Date anything perishable. Add two fields
+the template does not carry — on a merged section, as a one-line provenance
+note under its heading instead:
+
+- `source: filed from a session, YYYY-MM-DD, on the owner's request` — plus
+  the external source, if the analysis rests on one; that part is mandatory
+  and carries through every later merge.
+- `confidence: low` — the page is the agent's own output until something
+  independent confirms it (see § Standing rules).
 
 `status: evergreen` needs the 1–2 sentence top-line distillation at the head of
 the note — if the idea cannot be stated that briefly it is not evergreen yet.

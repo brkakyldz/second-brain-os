@@ -24,8 +24,8 @@ the *why*. The scripts themselves and their kill criteria are in
 
 | Trigger | Ritual | Mode |
 |---|---|---|
-| Every session | Session log + `MEMORY.md` update (standing rule) | applies |
-| The owner runs it | `/curator`, `node scripts/link-sweep.mjs` — by hand, with someone watching | applies safe, reports the rest |
+| After substantial work | Session log, plus a `MEMORY.md` update when a durable fact emerged (standing rule) | applies |
+| The owner runs it | `/curator`, which runs `link-sweep.mjs` and, with project cards, `project-doctor.mjs` — by hand, with someone watching | applies safe, reports the rest |
 | The owner runs it | `/audit` — budgets, orphans, overdue `review_by`, tag sprawl, contradiction stacking | **report only, never fixes** |
 
 Every trigger is a person. Nothing is scheduled (ADR 0033) and nothing reports

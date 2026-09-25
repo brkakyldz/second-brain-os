@@ -64,7 +64,7 @@ working directory. Resolve `<brain>` once:
   | cause | means | what it argues for |
   |---|---|---|
   | `paraphrase-miss` | the note says the same thing in different words — no shared term to grep for | **the only cause that argues for semantic search** |
-  | `wrong-term` | the vault uses a term the query didn't (jargon, EN/TR split) | an `aliases:` entry |
+  | `wrong-term` | the vault uses a term the query didn't (jargon, or the query in another language than the note) | an `aliases:` entry |
   | `typo` | the query or the note was misspelled | nothing — noise |
   | `not-exists` | the vault genuinely never had it | a note worth writing, not a search problem |
 

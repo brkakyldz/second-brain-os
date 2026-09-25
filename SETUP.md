@@ -121,13 +121,14 @@ In the new clone:
   natively, Claude Code reads it through the link. Never copy the folder
   instead — two copies drift.
 - **Activate the vault.** Create `core/.vault-active`. Until this file exists
-  the hook deliberately does nothing — no pull, no context injection — which is
-  what stops an unpersonalized clone from acting over your user's head.
-  Content is free-form; this explains itself to whoever finds it later:
+  the SessionStart hook deliberately does nothing — no pull, no context
+  injection — which is what stops an unpersonalized clone from acting over
+  your user's head. Content is free-form; this explains itself to whoever
+  finds it later:
 
   ```
   This file marks this directory as a live Second Brain vault.
-  The hooks in .claude/hooks/ do nothing without it.
+  The SessionStart hook in .claude/hooks/ does nothing without it.
   Activated: YYYY-MM-DD
   ```
 
@@ -145,6 +146,11 @@ git add core/USER.md core/IDENTITY.md INDEX.md notes/<each-project-note>.md
 git commit -m "setup: personalize brain"
 git push
 ```
+
+If you ran `node scripts/link-sweep.mjs` in Step 3, it left a report at
+`logs/YYYY-MM-DD_link-sweep.md`. Add it to the same commit, or delete it — it
+is a setup-time check, and leaving it untracked only puts noise in the first
+`git status` your user sees.
 
 If the machine has no git identity at all (`git config user.email` is empty),
 set it repo-locally before committing — otherwise the commit fails on identity,
@@ -203,10 +209,15 @@ Codex wiring is user-level, through the thin adapter in `.codex/hooks/`:
   }
   ```
 
-- **Project-only:** Codex has no project-scoped equivalent here. Codex still
-  reads `AGENTS.md` and `.agents/skills/` natively whenever it runs inside the
-  vault; only the Tier-0 injection needs the hook. Say so, and let your user
-  choose between wiring it globally and going without it.
+- **Project-only:** the template ships no project-level `.codex/hooks.json`,
+  on purpose. Codex adds the project and user layers together, so a shipped
+  one would fire twice the moment its user wired global mode, the recommended
+  setup. Codex still reads `AGENTS.md` and `.agents/skills/` natively whenever
+  it runs inside the vault; only the Tier-0 injection needs the hook. If your
+  user wants it for this folder alone, write the same block into the vault's
+  own `.codex/hooks.json` instead, have them trust it in Codex, commit that
+  file, and tell them to empty it again if they ever wire the hook globally.
+  `brain-doctor.mjs` fails the check when both layers carry it.
 
 ### Project sessions (global mode only)
 
@@ -222,9 +233,10 @@ node install.mjs --link-global-skills
 
 It creates one link per skill in `~/.claude/skills` and `~/.codex/skills`
 (or `CLAUDE_CONFIG_DIR` / `CODEX_HOME`) for each runtime that is installed,
-pointing back into the vault. It refuses to replace a real folder or someone
-else's link, and `node install.mjs --unlink-global-skills` removes exactly
-its own links again.
+pointing back into the vault. The only thing it ever replaces is a broken
+link; a real folder, or a link that still points somewhere else, is left
+alone. `node install.mjs --unlink-global-skills` removes exactly its own
+links again.
 
 **Check that Codex sees them.** Some Codex builds read user-level skills from
 `~/.agents/skills` rather than `~/.codex/skills`. Start Codex in any folder

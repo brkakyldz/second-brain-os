@@ -29,6 +29,15 @@ unsourced beliefs poisons every session after it.
    when it is evidence for a live contradiction; there is no reliable
    "already distilled" marker for the entire recent log stream.
 
+   Then run the two instruments this pass acts on. `node scripts/link-sweep.mjs`
+   writes `logs/YYYY-MM-DD_link-sweep.md`: its broken links, orphans, dangling
+   `MEMORY.md` pointers and notes missing from `INDEX.md` are this pass's to fix,
+   and the report is committed with this pass in step 10. If any note is a
+   project card, `node scripts/project-doctor.mjs` (read-only) lists log
+   `project:` ids with no card and focus lines pointing at a paused or done
+   card; fix what is vault-side, report the rest — a project repo's own state
+   is never this pass's to change.
+
 2. **Dedupe and merge.** For each pair of facts in `MEMORY.md`/`USER.md`
    that describe the same thing, keep one line. When two facts conflict,
    the one with the newer date or more recent session log wins; note what

@@ -13,7 +13,8 @@
       "Bash(node scripts/project-doctor.mjs:*)",
       "Bash(node scripts/tests/index-coverage.test.mjs:*)",
       "Bash(node scripts/tests/project-doctor.test.mjs:*)",
-      "Bash(node .claude/hooks/append-signal.mjs:*)"
+      "Bash(node .claude/hooks/append-signal.mjs:*)",
+      "Bash(node .claude/hooks/checks.mjs:*)"
     ]
   }
 }

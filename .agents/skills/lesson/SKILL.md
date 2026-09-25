@@ -79,19 +79,26 @@ Capture is mechanical, not analytical:
    note itself, never to an interpretation of the mistake. Skip this step
    rather than force a link.
 
-6. **Commit, when outside the brain.** Inside a brain session the session's
+6. **Add the catalog row.** In `<brain>/INDEX.md`, under **Lessons —
+   corrections, captured verbatim**, add
+   `| [[lesson-YYYY-MM-DD-<class>]] | <the correction, verbatim, cut at ~80 chars> | seedling |`,
+   replacing the `_(none yet …)_` placeholder row if it is still there. A
+   note without a row is a page nothing can find.
+
+7. **Commit, when outside the brain.** Inside a brain session the session's
    own commit carries these paths. From any other repo, commit them now, by
    explicit path:
    ```
-   git -C <brain> add -- notes/<file> logs/signals/<YYYY-MM>.md
-   git -C <brain> commit -m "lesson: <class> (<project>)" -- notes/<file> logs/signals/<YYYY-MM>.md
+   git -C <brain> add -- notes/<file> INDEX.md logs/signals/<YYYY-MM>.md
+   git -C <brain> commit -m "lesson: <class> (<project>)" -- notes/<file> INDEX.md logs/signals/<YYYY-MM>.md
    ```
-   Include the signals file (in both commands) only if it is new this month
-   or `git -C <brain> diff -- logs/signals/<YYYY-MM>.md` shows your line
-   alone; other uncommitted lines belong to another task, so then commit the
-   note only and say the signal line is left uncommitted. Never push.
+   Include `INDEX.md` and the signals file (in both commands) only if
+   `git -C <brain> diff -- <path>` shows your change alone, or the signals
+   file is new this month; other uncommitted lines belong to another task,
+   so then leave that file out and say which change is left uncommitted.
+   Never push.
 
-7. **Confirm in one line** to the owner: what was captured and its class, e.g.
+8. **Confirm in one line** to the owner: what was captured and its class, e.g.
    "Captured as `wrong-procedure`: notes/lesson-2026-08-25-wrong-procedure.md".
 
 ## Standing rule — never edited after capture
