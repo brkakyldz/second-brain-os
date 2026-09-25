@@ -4,7 +4,7 @@
 // What it does, and nothing more:
 //   1. asks a short interview,
 //   2. writes core/USER.md and the language line in core/IDENTITY.md,
-//   3. creates core/.vault-active — the marker every hook is gated on,
+//   3. creates core/.vault-active — the marker the SessionStart hook is gated on,
 //   4. links .claude/skills to .agents/skills, the one skills copy both
 //      runtimes load (a junction on Windows, a symlink elsewhere — ADR 0044),
 //   5. turns on git rerere,
@@ -28,6 +28,8 @@
 // exactly those links again. That is why it may touch user-level folders when
 // step 6 may not: you ask for it by name, it changes nothing but its own
 // links, and it reverses cleanly — a settings file merge is none of those.
+//
+// `node install.mjs --help` prints the usage and touches nothing.
 //
 // Safe to abort at any prompt (Ctrl-C) — nothing is written until the summary
 // is confirmed.
@@ -221,6 +223,32 @@ function globalSkills(remove) {
   return ok;
 }
 
+const USAGE = `Second Brain OS — install.mjs
+
+  node install.mjs                         one-time setup: interview, core/USER.md,
+                                           core/.vault-active, skills link, rerere;
+                                           prints the global-mode wiring, writes none of it
+  node install.mjs --link-skills           create or repair only .claude/skills -> .agents/skills
+  node install.mjs --link-global-skills    link /closeout, /lesson and /recall into the
+                                           user-level skills folder of each installed runtime
+  node install.mjs --unlink-global-skills  remove exactly those links again
+  node install.mjs --help                  this text
+
+Nothing here commits, and the interview writes nothing until you confirm it.
+`;
+
+const KNOWN_ARGS = ['--link-skills', '--link-global-skills', '--unlink-global-skills', '--help', '-h'];
+const args = process.argv.slice(2);
+if (args.includes('--help') || args.includes('-h')) {
+  stdout.write(USAGE);
+  process.exit(0);
+}
+const unknown = args.filter((a) => !KNOWN_ARGS.includes(a));
+if (unknown.length) {
+  process.stderr.write(`Unknown argument: ${unknown.join(' ')}\n\n${USAGE}`);
+  process.exit(2);
+}
+
 if (process.argv.includes('--link-skills')) {
   const r = linkSkills();
   stdout.write(`.claude/skills -> .agents/skills: ${r.ok ? r.note : `FAILED — ${r.note}`}\n`);
@@ -350,7 +378,7 @@ About to write:
 
   core/USER.md          (${userMd.length} chars)
   core/IDENTITY.md      (language line only)
-  core/.vault-active    (switches the hooks on)
+  core/.vault-active    (switches the SessionStart hook on)
   .claude/skills        (link to .agents/skills — the one skills copy)
   git config rerere.enabled true
 
@@ -371,8 +399,9 @@ if (fs.existsSync(idPath)) {
 
 fs.writeFileSync(
   MARKER,
-  `# This file switches the hooks on. It is gitignored on purpose: a fresh
-# clone of the template must never inject context or pull over your head.
+  `# This file switches the SessionStart hook on. It is gitignored on purpose:
+# a fresh clone of the template must never inject context or pull over your
+# head.
 # Created ${today} by install.mjs.
 `,
   'utf8',
@@ -458,14 +487,15 @@ level — opt-in, and undone by --unlink-global-skills:
     node install.mjs --link-global-skills
 
 Trade-off, stated plainly: every session on the machine then pays a small
-\`git pull\` at start (skipped whenever the vault has uncommitted changes).
+\`git pull\` at start (skipped whenever the vault has uncommitted changes to
+tracked files).
 
 Check the wiring any time with:  node scripts/brain-doctor.mjs
 
 Now open this folder as an Obsidian vault (optional), start \`claude\` or
-\`codex\` in it, and say hello. Claude Code loads AGENTS.md and core/ through
-this repo's own hook; Codex reads AGENTS.md natively and gets core/ once its
-user-level hook (above) is wired.
+\`codex\` in it, and say hello. Claude Code reads AGENTS.md through CLAUDE.md
+and gets core/ from this repo's own hook; Codex reads AGENTS.md natively and
+gets core/ only once its user-level hook (above) is wired.
 `);
 
 rl.close();
