@@ -50,10 +50,12 @@ and removed are listed as removed rather than quietly dropped — see
   lifecycle: card → repo STATE → work → `/closeout` → one short brain log.
   Formats and adoption steps: `.claude/templates/project-repo/`.
 - **The rules that can be checked are written as checks.** Wikilink form, note
-  frontmatter and catalog coverage live in `.claude/hooks/checks.mjs` and
-  `scripts/link-sweep.mjs`, not only as prose — this system's hardest-won
-  lesson is that a written procedure loses to the in-the-moment default while
-  the work still looks finished.
+  frontmatter and catalog coverage are encoded in `.claude/hooks/checks.mjs`,
+  and `scripts/link-sweep.mjs` reports broken links, orphans and uncatalogued
+  notes whenever you run it — this system's hardest-won lesson is that a
+  written procedure loses to the in-the-moment default while the work still
+  looks finished. Since v1.1 nothing runs the compiled checks automatically;
+  they are kept as code, and `/audit` reports what they encode.
 
 Full design rationale: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -114,8 +116,10 @@ skills, and verifies the hook fires.
    `git add core/USER.md core/IDENTITY.md` then
    `git commit -m "setup: personalize brain"` and `git push`.
 5. Open the folder as an Obsidian vault (optional).
-6. `cd` in, run `claude` or `codex`, say hello. `AGENTS.md` and `core/` load
-   automatically.
+6. `cd` in, run `claude` or `codex`, say hello. Claude Code loads the rules
+   (`CLAUDE.md` → `AGENTS.md`) and `core/` through this repo's own hook.
+   Codex reads `AGENTS.md` natively but gets `core/` only once its
+   user-level hook is wired — see [Global mode](#global-mode-recommended).
 7. Check the wiring: `node scripts/brain-doctor.mjs`.
 
 ## Daily use
@@ -179,31 +183,114 @@ node install.mjs --link-global-skills
 
 It links the three skill folders into `~/.claude/skills` and
 `~/.codex/skills` (or `CLAUDE_CONFIG_DIR` / `CODEX_HOME`) for each runtime
-that is installed, never replaces anything that is not a broken link of its
-own, and the skills find the vault from the hook's "The brain lives at …"
-line. To give a project the repo-side formats, see
+that is installed, never replaces anything but a broken link, and the skills
+find the vault from the hook's "The brain lives at …" line. Some Codex builds
+read user skills from `~/.agents/skills` instead; `SETUP.md` Step 5 says how
+to check and what to do. To give a project the repo-side formats, see
 [`.claude/templates/project-repo/README.md`](.claude/templates/project-repo/README.md).
 
-## Upgrading from v1.0
+## What's new in v1.1
 
-v1.1 removes the Stop / SessionEnd / PreCompact checkpoint, the session flush,
-the reuse telemetry and the proposals sweep. After pulling:
+v1.1 (2026-09-25) brings the template in line with the reference instance as
+it runs today. The one-line version: **one hook that never commits, two equal
+runtimes, and project state that lives in the project's own repo.** Several of
+these additions are younger than the usual two-week bar; the owner lifted it
+for this release and ADR 0046 says which ones.
 
-1. **Unwire the retired hooks.** If you ran global mode, delete every entry in
-   `~/.claude/settings.json` that points at `checkpoint.mjs`,
-   `session-end.mjs` or `reuse-telemetry.mjs` in your vault — the files no
-   longer exist. Keep the one `SessionStart` entry.
-2. Run `node install.mjs --link-skills` — the skills moved from `.claude/skills/`
-   to `.agents/skills/`.
-3. Run `node scripts/brain-doctor.mjs`. It fails loudly on any retired hook
-   still wired, a duplicate SessionStart, or a missing skills link.
-4. From now on, commit your own work with explicit paths — nothing commits for
-   you any more. `PROPOSALS.md` is yours to keep by hand.
-5. In global mode, optionally `node install.mjs --link-global-skills` so
-   `/closeout`, `/lesson` and `/recall` load in project sessions. Project
-   notes become thin cards (`project_id`, `repo`, `state_file` — see
-   `.claude/templates/project.md`); their live status moves into each
-   project's own `docs/CURRENT_STATE.md`.
+**Removed**
+
+- The Stop / SessionEnd / PreCompact checkpoint that committed and pushed the
+  whole tree (`checkpoint.mjs`, `session-end.mjs`). Commits are task-owned:
+  each task stages its own explicit paths (ADR 0042, 0044).
+- The session flush (`flush.mjs`), reuse telemetry (`reuse-telemetry.mjs`),
+  the proposals sweep (`proposals.mjs`), `/flywheel` and the maintenance due
+  line (`maintenance-stamp.mjs`) (ADR 0038, 0039).
+- The Node secret scan inside hook commits — there are no hook commits left.
+
+**Added**
+
+- Codex as an equal runtime: `AGENTS.md` is the constitution (`CLAUDE.md`
+  imports it), `.agents/skills/` is the one skills copy (`.claude/skills` is
+  a link to it), `.codex/hooks/session-start.mjs` is the Codex adapter.
+- Project work in the project's repo (ADR 0045): the repo-side formats in
+  `.claude/templates/project-repo/`, thin project cards, `/closeout`, and
+  `node install.mjs --link-global-skills` to reach it from any project.
+- `scripts/brain-doctor.mjs` and `scripts/project-doctor.mjs`, both
+  read-only; the ranked lookup `retrieval-eval.mjs --query`;
+  `notes/self-evolution-policy.md`, split out of the lifecycle policy.
+
+**Changed**
+
+- `SessionStart` skips its pull when the vault has uncommitted changes,
+  instead of stashing another task's files (no more autostash).
+- Secret scanning is opt-in: gitleaks through `.pre-commit-config.yaml`.
+- `PROPOSALS.md` is a list you keep by hand; `/curator` and `/audit` report
+  in the conversation and their own log instead of appending to it.
+- `flywheel-metrics.mjs` is `vault-metrics.mjs`, counting without scoring.
+- Project notes are thin cards; their live status moves into each project's
+  `docs/CURRENT_STATE.md`.
+
+### Upgrading from v1.0
+
+A vault made with **Use this template** shares no git history with this
+repository, so there is nothing to pull: you fetch v1.1 and take its machinery
+path by path. Your content — `core/`, `notes/`, `logs/`, `raw/`,
+`archive/`, `INDEX.md`, `PROPOSALS.md` — is never overwritten. Start from a
+clean tree (`git status` shows nothing), in the vault's root. The commands are
+the same in bash and PowerShell.
+
+1. **Fetch v1.1** — with this repository's URL:
+
+   ```
+   git remote add template <this repo's URL>
+   git fetch template --tags
+   ```
+
+2. **Note your own edits first.** `git diff --stat v1.0 HEAD` lists every file
+   you changed since setup. Any of them in step 3's list is about to be
+   replaced — above all `CLAUDE.md`, which was the constitution in v1.0; save
+   `git diff v1.0 HEAD -- CLAUDE.md` somewhere and re-apply it to `AGENTS.md`
+   afterwards.
+
+3. **Take the machinery:**
+
+   ```
+   git checkout v1.1 -- .agents .claude/hooks .claude/templates .claude/settings.json .codex scripts docs AGENTS.md CLAUDE.md README.md SETUP.md install.mjs .gitignore .gitattributes .pre-commit-config.yaml notes/lifecycle-policy.md notes/self-evolution-policy.md logs/signals/README.md raw/README.md
+   ```
+
+4. **Move your own skills** out of `.claude/skills/`, if you added any —
+   `git mv .claude/skills/<name> .agents/skills/<name>` for each — then
+   **remove what v1.1 deleted:**
+
+   ```
+   git rm -r -q .claude/skills .claude/hooks/checkpoint.mjs .claude/hooks/flush.mjs .claude/hooks/maintenance-stamp.mjs .claude/hooks/reuse-telemetry.mjs .claude/hooks/session-end.mjs scripts/flywheel-metrics.mjs scripts/proposals.mjs
+   ```
+
+5. **Link the skills and review the rest.** Run
+   `node install.mjs --link-skills`. Re-add any lines of your own that
+   `git diff --cached -- .gitignore` shows as removed. Compare the files that
+   are yours to merge by hand — `git diff HEAD v1.1 -- INDEX.md PROPOSALS.md core/IDENTITY.md`
+   — and at least add the `[[self-evolution-policy]]` row to `INDEX.md`.
+   In global mode, empty the `hooks` block of `.claude/settings.json` again
+   (keep `permissions`).
+
+6. **Commit the upgrade.** Stage what you edited in step 5 by name —
+   `git add -- .gitignore INDEX.md .claude/settings.json`, whichever you
+   touched — then `git commit -m "upgrade: Second Brain OS v1.1"`. The index
+   holds exactly the upgrade, because the tree was clean when you started.
+
+7. **Unwire the retired hooks at user level.** In global mode, delete every
+   entry in `~/.claude/settings.json` that points at `checkpoint.mjs`,
+   `session-end.mjs` or `reuse-telemetry.mjs` in your vault; keep the one
+   `SessionStart` entry. For Codex, add its entry as in [Global mode](#global-mode-recommended).
+
+8. **Check it:** `node scripts/brain-doctor.mjs` fails loudly on a retired
+   hook still wired, a duplicate SessionStart or a missing skills link. Then,
+   optionally, `node install.mjs --link-global-skills`, and turn your project
+   notes into cards (`.claude/templates/project.md`).
+
+From here on, nothing commits for you: each task commits its own explicit
+paths.
 
 ## Safety
 
@@ -217,8 +304,11 @@ the reuse telemetry and the proposals sweep. After pulling:
   every commit via `.pre-commit-config.yaml`. On GitHub, also turn on secret-scanning push
   protection for your vault repo.
 - **Nothing is deleted automatically.** Stale or closed content moves to
-  `archive/`. The curator can *propose* a deletion in two narrow cases; it never
-  executes one. `git revert` covers everything else.
+  `archive/`. The only deletions are the two narrow cases in
+  `notes/lifecycle-policy.md` §6: an exact duplicate line within one core
+  file, which `/curator` collapses, and a note that is unlinked, superseded
+  and load-bearing nowhere, which it proposes and only you approve. `git
+  revert` covers everything else.
 - The hook is inert until `core/.vault-active` exists, so a fresh clone never
   pulls or injects anything over your head.
 - `AGENTS.md` and `core/IDENTITY.md` are protected **by convention**: agents

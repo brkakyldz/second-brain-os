@@ -462,7 +462,9 @@ Trade-off, stated plainly: every session on the machine then pays a small
 Check the wiring any time with:  node scripts/brain-doctor.mjs
 
 Now open this folder as an Obsidian vault (optional), start \`claude\` or
-\`codex\` in it, and say hello — AGENTS.md and core/ load automatically.
+\`codex\` in it, and say hello. Claude Code loads AGENTS.md and core/ through
+this repo's own hook; Codex reads AGENTS.md natively and gets core/ once its
+user-level hook (above) is wired.
 `);
 
 rl.close();

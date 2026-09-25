@@ -170,7 +170,8 @@ it doesn't, stop and tell your user rather than leaving a broken file.
   wires SessionStart through `${CLAUDE_PROJECT_DIR}`.
 - **Global:** merge this into `~/.claude/settings.json`, then remove the
   `hooks` block from the vault's own `.claude/settings.json` (keep its
-  `permissions` block), or the hook fires twice inside the vault:
+  `permissions` block) and commit that one file, or the hook fires twice
+  inside the vault:
 
   ```json
   {
@@ -223,6 +224,21 @@ It creates one link per skill in `~/.claude/skills` and `~/.codex/skills`
 pointing back into the vault. It refuses to replace a real folder or someone
 else's link, and `node install.mjs --unlink-global-skills` removes exactly
 its own links again.
+
+**Check that Codex sees them.** Some Codex builds read user-level skills from
+`~/.agents/skills` rather than `~/.codex/skills`. Start Codex in any folder
+outside the vault and ask it to list the skills it has loaded. If `closeout`,
+`lesson` and `recall` are missing, link them into `~/.agents/skills` by
+hand, one per skill, with `<VAULT>` as above:
+
+- Git Bash / macOS / Linux:
+  `mkdir -p ~/.agents/skills && ln -s "<VAULT>/.agents/skills/closeout" ~/.agents/skills/closeout`
+- Windows PowerShell:
+  `New-Item -ItemType Junction -Path "$HOME\.agents\skills\closeout" -Target "<VAULT>\.agents\skills\closeout"`
+
+(In Git Bash on Windows, `ln -s` makes a copy by default — use the
+PowerShell line there.) `brain-doctor.mjs` accepts a
+Codex link in either folder.
 
 Tell your user this wiring is per-machine. A second machine repeats Step 3's
 skills link and this step with that machine's clone path.

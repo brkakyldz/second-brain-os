@@ -31,8 +31,9 @@ Four constraints drive every other decision:
 
 Two more were added by what went wrong:
 
-5. **Machine state does not live on the tracked tree** (ADR 0032). The first
-   four let ~5,400 lines of machinery accumulate around 17 notes; a counter a
+5. **Machine state does not live on the tracked tree** (ADR 0032). In the
+   reference instance the first four let ~5,400 lines of machinery accumulate
+   around 17 notes; a counter a
    hook ticks every turn is not evidence. Derived, rebuild-tolerant state goes
    in a gitignored sidecar.
 6. **Commits belong to the task that wrote the files** (ADR 0042, 0044). Two
@@ -145,7 +146,7 @@ the same file is correct from any working directory, in any clone.
 
 | Event | Job (both runtimes) |
 |---|---|
-| `SessionStart` | Skip if `core/.vault-active` is missing. Otherwise `git pull --rebase` — skipped when tracked changes exist, because they belong to a live task — then inject Tier 0 with budget meters and, at most, one notice about unpushed commits |
+| `SessionStart` | Skip if `core/.vault-active` is missing. Otherwise `git pull --rebase` — skipped when tracked changes exist, because they belong to a live task — then inject Tier 0 with budget meters and, at most, one notice about unpushed commits. Outside the vault it also injects the global-mode standing rules (§10) |
 | `Stop` / `SessionEnd` / `PreCompact` | Nothing. The task stages and commits only its own explicit paths |
 
 Design notes worth keeping:
@@ -182,9 +183,11 @@ Only the parts of the policy that exist as running code belong here.
 Written as code but **not run automatically** since v1.1:
 
 - **Compiled checks** (`.claude/hooks/checks.mjs`) — wikilink short form, note
-  frontmatter, `INDEX.md` coverage. They ran from the Stop checkpoint; with the
-  checkpoint gone they are reusable code a task may call before its own commit.
-  `link-sweep.mjs` carries a git-blind twin of the index-coverage check.
+  frontmatter, `INDEX.md` coverage. They ran from the Stop checkpoint until v1.1.
+  There is no command-line runner for them yet: today they are exercised by
+  `scripts/tests/index-coverage.test.mjs` and read by `vault-metrics.mjs`,
+  `link-sweep.mjs` carries a git-blind twin of the index-coverage check, and
+  `/audit` reports what they encode.
 - **The secret scanner** (`scanStagedForSecrets` in `lib.mjs`). The scan that
   runs, once you install it, is gitleaks via `.pre-commit-config.yaml`.
 
@@ -253,12 +256,15 @@ Three properties are deliberate:
   appends; real multi-device concurrent editing would need more than that.
 - **The Windows skills junction stores an absolute path.** Move the vault
   folder and the link breaks; `node install.mjs --link-skills` repairs it and
-  `brain-doctor.mjs` reports it.
+  `brain-doctor.mjs` reports it. The user-level links from
+  `--link-global-skills` behave the same way, and rerunning that flag repairs
+  them.
 - **The policy is only as good as its enforcement.** Anything enforced only by
   prose will drift; §6 lists what is code and what is not.
-- **The machinery can outgrow the content.** Measured once at ~5,400 lines of
-  hooks and scripts against 17 notes. A new hook or script now needs a failure
-  that demanded it, the same gate a new folder faces.
+- **The machinery can outgrow the content.** Measured once, in the reference
+  instance, at ~5,400 lines of hooks and scripts against 17 notes. A new
+  hook or script now needs a failure that demanded it, the same gate a new
+  folder faces.
 - **`raw/` can become a graveyard.** Files land, nothing ingests them. The
   symptom is visible (an un-ingested file appears in no index and no note) and
   the response is written down in advance: three weeks of that means the inlet
