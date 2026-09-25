@@ -108,25 +108,8 @@ including whether the brain should follow you into every project (global mode,
 recommended) or stay project-scoped — personalizes the core files, links the
 skills, and verifies the hook fires.
 
-### Manual setup
-
-1. Click **Use this template** above and create your own repository —
-   **choose Private.** This will be your actual brain; it should never be public.
-2. Clone it.
-3. Run `node install.mjs`. It interviews you, writes `core/USER.md`, fills the
-   language line in `core/IDENTITY.md`, creates `core/.vault-active`, links
-   `.claude/skills` to `.agents/skills`, enables `git rerere`, and prints the
-   global-mode wiring for both runtimes for you to paste. It does not touch
-   your user-level settings itself, and it does not commit.
-4. Commit the personalization yourself:
-   `git add core/USER.md core/IDENTITY.md` then
-   `git commit -m "setup: personalize brain"` and `git push`.
-5. Open the folder as an Obsidian vault (optional).
-6. `cd` in, run `claude` or `codex`, say hello. Claude Code loads the rules
-   (`CLAUDE.md` → `AGENTS.md`) and `core/` through this repo's own hook.
-   Codex reads `AGENTS.md` natively but gets `core/` only once its
-   user-level hook is wired — see [Global mode](#global-mode-recommended).
-7. Check the wiring: `node scripts/brain-doctor.mjs`.
+Prefer to do it by hand? See
+[Manual setup](SETUP.md#manual-setup-without-an-agent) in `SETUP.md`.
 
 ## Daily use
 
@@ -244,65 +227,7 @@ for this release and ADR 0046 says which ones.
 
 ### Upgrading from v1.0
 
-A vault made with **Use this template** shares no git history with this
-repository, so there is nothing to pull: you fetch v1.1 and take its machinery
-path by path. Your content — `core/`, `notes/`, `logs/`, `raw/`,
-`archive/`, `INDEX.md`, `PROPOSALS.md` — is never overwritten. Start from a
-clean tree (`git status` shows nothing), in the vault's root. The commands are
-the same in bash and PowerShell.
-
-1. **Fetch v1.1** — with this repository's URL:
-
-   ```
-   git remote add template <this repo's URL>
-   git fetch template --tags
-   ```
-
-2. **Note your own edits first.** `git diff --stat v1.0 HEAD` lists every file
-   you changed since setup. Any of them in step 3's list is about to be
-   replaced — above all `CLAUDE.md`, which was the constitution in v1.0; save
-   `git diff v1.0 HEAD -- CLAUDE.md` somewhere and re-apply it to `AGENTS.md`
-   afterwards.
-
-3. **Take the machinery:**
-
-   ```
-   git checkout v1.1 -- .agents .claude/hooks .claude/templates .claude/settings.json .codex scripts docs AGENTS.md CLAUDE.md README.md SETUP.md install.mjs .gitignore .gitattributes .pre-commit-config.yaml notes/lifecycle-policy.md notes/self-evolution-policy.md logs/signals/README.md raw/README.md
-   ```
-
-4. **Move your own skills** out of `.claude/skills/`, if you added any —
-   `git mv .claude/skills/<name> .agents/skills/<name>` for each — then
-   **remove what v1.1 deleted:**
-
-   ```
-   git rm -r -q .claude/skills .claude/hooks/checkpoint.mjs .claude/hooks/flush.mjs .claude/hooks/maintenance-stamp.mjs .claude/hooks/reuse-telemetry.mjs .claude/hooks/session-end.mjs scripts/flywheel-metrics.mjs scripts/proposals.mjs
-   ```
-
-5. **Link the skills and review the rest.** Run
-   `node install.mjs --link-skills`. Re-add any lines of your own that
-   `git diff --cached -- .gitignore` shows as removed. Compare the files that
-   are yours to merge by hand — `git diff HEAD v1.1 -- INDEX.md PROPOSALS.md core/IDENTITY.md`
-   — and at least add the `[[self-evolution-policy]]` row to `INDEX.md`.
-   In global mode, empty the `hooks` block of `.claude/settings.json` again
-   (keep `permissions`).
-
-6. **Commit the upgrade.** Stage what you edited in step 5 by name —
-   `git add -- .gitignore INDEX.md .claude/settings.json`, whichever you
-   touched — then `git commit -m "upgrade: Second Brain OS v1.1"`. The index
-   holds exactly the upgrade, because the tree was clean when you started.
-
-7. **Unwire the retired hooks at user level.** In global mode, delete every
-   entry in `~/.claude/settings.json` that points at `checkpoint.mjs`,
-   `session-end.mjs` or `reuse-telemetry.mjs` in your vault; keep the one
-   `SessionStart` entry. For Codex, add its entry as in [Global mode](#global-mode-recommended).
-
-8. **Check it:** `node scripts/brain-doctor.mjs` fails loudly on a retired
-   hook still wired, a duplicate SessionStart or a missing skills link. Then,
-   optionally, `node install.mjs --link-global-skills`, and turn your project
-   notes into cards (`.claude/templates/project.md`).
-
-From here on, nothing commits for you: each task commits its own explicit
-paths.
+Step by step in [`docs/UPGRADING.md`](docs/UPGRADING.md#upgrading-from-v10).
 
 ## Safety
 
@@ -329,58 +254,7 @@ paths.
 
 ## FAQ
 
-**Why not a vector database?** Grep, wikilinks, `INDEX.md` and a curated
-`MEMORY.md` cover retrieval for a single-person vault without an embedding
-pipeline to keep in sync. This isn't an assumption: the reference instance
-measured it with 52 golden queries and found zero paraphrase-misses — every
-failure was a vocabulary mismatch, which an `aliases:` entry fixes. The trigger
-to revisit is written down (`docs/DECISIONS.md`, 0010/0018) and has not fired.
-
-**Can I use only one of Claude Code or Codex?** Yes. Each runtime needs only
-its own SessionStart wiring; the vault content, the rules and the skills are
-the same files either way.
-
-**Can I use it without Obsidian?** Yes. Plain Markdown and YAML frontmatter; any
-editor works. Obsidian adds backlinks and graph view but isn't load-bearing.
-
-**Why doesn't anything commit automatically any more?** Because once two
-sessions — or two runtimes — work in one checkout, a hook cannot know which
-changed file belongs to which task. The reference instance's checkpoint swept
-53 files from several sessions into one commit before it was retired. The
-price: a session that ends without committing leaves its files for the next
-one. `brain-doctor.mjs` and `git status` show them.
-
-**Where does a project's status go?** Into the project's own repo, in
-`docs/CURRENT_STATE.md` — the only file that states it — committed with the
-code it describes. The brain's card for that project says where the repo and
-that file are and never restates them: a copied status is right for a day and
-wrong afterwards. The reference instance tried the opposite (the brain as the
-only working record) and no coding session ever resumed from it.
-
-**What if I work offline?** Everything works locally. The pull at start fails
-open, and a push that fails just leaves the commit local until the next
-successful one — the next session start mentions it once a backlog is over a
-day old.
-
-**How do I undo something the agent wrote?** `git log`, then `git revert`. Git
-is the only database here precisely so undo is free.
-
-**Does anything run on a schedule?** No, and that's deliberate. Unattended
-maintenance was built, run, and retired: a pass that runs with nobody watching
-produces work nobody reads. Nothing tells you a pass is overdue either — you
-run `/curator` or `/audit` when you want them.
-
-**What happens if a memory file gets too big?** `MEMORY.md` and `USER.md` have
-character budgets. Going over never silently truncates — the session-start
-header shows usage before you write, marks a file that is over budget, and
-`brain-doctor.mjs` fails on it until `/curator` consolidates.
-
-**Isn't `raw/` just the inbox you removed?** No, and the difference is the test
-for any folder like it: an inbox is a queue whose healthy state is *empty* and
-whose producer was cancelled; `raw/` is a corpus whose healthy state is *full*
-and whose producer is you, saving what you read. The failure mode is real, so it
-is named with a kill criterion: files sitting un-ingested for three weeks mean
-the inlet isn't wanted, and it gets removed rather than nagged about.
+Moved to [`docs/FAQ.md`](docs/FAQ.md).
 
 ## Learn more
 

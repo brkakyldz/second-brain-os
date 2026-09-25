@@ -19,6 +19,9 @@ Do the steps in order. Don't skip Step 0. Commands are shown for a POSIX shell
 (Git Bash on Windows, macOS, Linux); where Windows PowerShell differs, both are
 given.
 
+A human setting up without an agent follows
+[Manual setup](#manual-setup-without-an-agent) at the end instead.
+
 ## Step 0 — prerequisites
 
 Check each and report the results before continuing:
@@ -165,6 +168,17 @@ on Windows — Node accepts them, and they need no escaping inside JSON. Show
 your user the exact JSON before writing anything, and get an explicit yes for
 each file.
 
+**What global mode costs and does**, for when your user asks. Every session
+on the machine pays a small `git pull` at start — skipped whenever the vault
+has uncommitted changes to tracked files, because those belong to a live
+task. The scripts resolve the brain root themselves (their own location, or
+`BRAIN_DIR` if it is set), so they are correct from any working directory. In
+a project session the hook also injects standing rules: the project's state
+lives in its own repo, so read its `AGENTS.md`, `docs/CURRENT_STATE.md` and
+the last lines of `docs/WORKLOG.md` before planning, and end substantial work
+with `/closeout`. On the manual path, `node install.mjs` prints both blocks
+below with the vault's path filled in.
+
 **Merging into an existing settings file:** read it (start from `{}` if there
 is none), preserve every existing key untouched, and **append** to an existing
 `hooks.SessionStart` array rather than replacing it — the user may already have
@@ -236,7 +250,8 @@ It creates one link per skill in `~/.claude/skills` and `~/.codex/skills`
 pointing back into the vault. The only thing it ever replaces is a broken
 link; a real folder, or a link that still points somewhere else, is left
 alone. `node install.mjs --unlink-global-skills` removes exactly its own
-links again.
+links again. The linked skills find the vault from the hook's "The brain
+lives at …" line.
 
 **Check that Codex sees them.** Some Codex builds read user-level skills from
 `~/.agents/skills` rather than `~/.codex/skills`. Start Codex in any folder
@@ -335,3 +350,29 @@ Tell your user, concretely:
 
 That's the full install. Nothing else in this repo needs to run for first-time
 setup.
+
+---
+
+## Manual setup (without an agent)
+
+For a human setting up by hand. An agent following this file skips this
+section: Steps 0–7 above are the whole install.
+
+1. On this repository's GitHub page, click **Use this template** and create
+   your own repository — **choose Private.** This will be your actual brain;
+   it should never be public.
+2. Clone it.
+3. Run `node install.mjs`. It interviews you, writes `core/USER.md`, fills the
+   language line in `core/IDENTITY.md`, creates `core/.vault-active`, links
+   `.claude/skills` to `.agents/skills`, enables `git rerere`, and prints the
+   global-mode wiring for both runtimes for you to paste. It does not touch
+   your user-level settings itself, and it does not commit.
+4. Commit the personalization yourself:
+   `git add core/USER.md core/IDENTITY.md` then
+   `git commit -m "setup: personalize brain"` and `git push`.
+5. Open the folder as an Obsidian vault (optional).
+6. `cd` in, run `claude` or `codex`, say hello. Claude Code loads the rules
+   (`CLAUDE.md` → `AGENTS.md`) and `core/` through this repo's own hook.
+   Codex reads `AGENTS.md` natively but gets `core/` only once its
+   user-level hook is wired — see [Step 5](#step-5--runtime-wiring).
+7. Check the wiring: `node scripts/brain-doctor.mjs`.
