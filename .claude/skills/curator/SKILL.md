@@ -1,6 +1,6 @@
 ---
 name: curator
-description: Consolidates the vault's memory: merges duplicate facts, resolves contradictions (newer evidence wins), archives stale entries, distills old session logs into topic files, and re-checks size budgets
+description: Explicit maintenance pass that reconciles the vault's live memory, distills due logs, archives stale evidence, and verifies Tier-0 budgets.
 disable-model-invocation: true
 ---
 
@@ -15,15 +15,19 @@ Runs a maintenance pass over the memory core. Only invoked explicitly via
 one of: a vault file path, a verbatim quote from the material it came from, or
 a commit hash. Summarizing a note is inference; so is "combining" two facts
 into a third. If the evidence can't be pointed at, the fact does not get
-written — surface it as a row in the proposal table or a question in
+written — surface it in the report, or as a question in
 `core/OPEN_QUESTIONS.md` instead. A reflective pass that writes confident,
 unsourced beliefs poisons every session after it.
 
 ## Procedure
 
-1. **Read the current state.** Load `core/MEMORY.md`, `core/USER.md`,
-   `core/IDENTITY.md`, the topic files under `notes/`, and every
-   session log in `logs/` not already distilled.
+1. **Protect the working tree, then read current state.** Run `git status` and
+   attribute every pre-existing change before writing. Pull with `--ff-only` as
+   the vault sync rule requires. Load `core/MEMORY.md`, `core/USER.md`,
+   `core/IDENTITY.md`, `INDEX.md`, all topic files under `notes/`, the previous
+   curator log, and every log currently due under step 4. Read a newer log only
+   when it is evidence for a live contradiction; there is no reliable
+   "already distilled" marker for the entire recent log stream.
 
 2. **Dedupe and merge.** For each pair of facts in `MEMORY.md`/`USER.md`
    that describe the same thing, keep one line. When two facts conflict,
@@ -37,7 +41,11 @@ unsourced beliefs poisons every session after it.
      file in `notes/`, one pointer line in `MEMORY.md`);
    - one topic holding **>5 lines in `MEMORY.md`** → push the detail down into
      `notes/<topic>.md`, leave **1** pointer line;
-   - a `notes/<topic>.md` past **150 lines** → split by sub-topic.
+   - a playbook past **150 lines** → split by sub-topic;
+   - another note past **150 lines** → classify it before acting. A research
+     report may need an immutable archived source plus a short live
+     distillation, but only under an accepted storage decision; an active plan
+     or genuinely atomic long reference is not mechanically split.
    These are triggers, not quotas: never merge notes that are about
    genuinely different things just to hit a number.
 
@@ -59,6 +67,9 @@ unsourced beliefs poisons every session after it.
    - Move the original log file to `archive/` (never delete it — the raw
      record stays available, just out of the searched-by-default path;
      archive is flat, so the filename stays `YYYY-MM-DD_HHMM.md`, ADR 0028).
+   - Record the batch size and how many logs produced a genuinely new fact
+     (ADD) versus only facts already present (NOOP). This is the evidence for
+     whether the 30-day rule earns its cost.
 
 5. **Verify budgets.** Recount **characters** in `MEMORY.md` (limit 4000, or
    `BRAIN_MEMORY_BUDGET` if set) and `USER.md` (limit 2000, or
@@ -67,12 +78,16 @@ unsourced beliefs poisons every session after it.
    If still over budget after steps 2–4, repeat consolidation — do not stop
    with a file over budget.
    Two kinds of entry do not belong in `MEMORY.md` at all and are moved rather
-   than compressed: the vault's own construction history goes to
-   [[vault-build-history]], and open work items go to `PROPOSALS.md`.
+   than compressed: the vault's own construction history goes to a note of
+   its own, and open work items go to the hand-kept list in `PROPOSALS.md` —
+   only ever on the owner's say-so, never as a queue this pass fills for
+   itself.
 
 6. **Never delete — propose instead.** Nothing produced by this pass is ever
-   deleted outright. Stale content always lands in `notes/`,
-   `archive/`, or `archive/logs/`. Only exact duplicate lines within
+   deleted outright. Stale content always lands in `notes/` or in `archive/`,
+   which is flat — a distilled log keeps its `YYYY-MM-DD_HHMM.md` name and
+   moves to `archive/` itself, never into a subfolder (ADR 0028, and step 4
+   above says the same thing). Only exact duplicate lines within
    `MEMORY.md`/`USER.md` itself may be collapsed to one. If a note meets all
    three deletion conditions of [[lifecycle-policy]] §6
    (unlinked + superseded + not load-bearing), list it in a **deletion
@@ -85,55 +100,34 @@ unsourced beliefs poisons every session after it.
    line in `USER.md` or `IDENTITY.md` — those two files never take
    untrusted-sourced content, full stop.
 
-8. **Mark what you touched (idempotency).** Every note this pass rewrote, or
-   raised a proposal about, gets `curator_proposed: YYYY-MM-DD` in its
-   frontmatter. Before proposing anything, read those markers: a note already
-   marked for a proposal that the owner has not yet answered is **not** re-raised,
-   and a proposal they rejected (open rows in `PROPOSALS.md`, decided rows in
-   `logs/*_proposals.md` and the ledger's `rejection` lines) is never raised a
-   second time. Past 20 open rows, consolidate instead of appending more —
-   that cap is the file's own budget. Repeated identical
-   proposals are how a review queue dies.
+8. **Mark what you touched (idempotency).** Every note this pass rewrote gets
+   `curator_proposed: YYYY-MM-DD` in its frontmatter. Before raising anything,
+   read those markers and the previous curator logs: the same finding reported
+   run after run is how a maintenance pass stops being read.
 
-9. **Raise every proposal in `PROPOSALS.md`, log the table in `logs/`.**
-   The session-log table stays (it is the evidence, with the reasoning), but
-   the *ask* goes to the one approval surface the owner actually reviews — one
-   appended row per proposal, id allocated by the script, never hand-formatted:
+9. **Report what you found; do not open a queue.** Everything this pass
+   applied goes in the session log with its evidence. Everything it did *not*
+   apply — because the file is protected, because the change is destructive,
+   because it is a judgment call — is said to the owner in the same conversation,
+   in the report, and nowhere else.
 
-   ```
-   node scripts/proposals.mjs --add --feature curator-merge --text "merge X into Y · evidence: logs/2026-08-25_1200.md"
-   ```
+   The `PROPOSALS.md` approval queue was retired (ADR 0038): in the reference
+   instance it accumulated 38 rows, 19 of them still open with four past a
+   week, and the review cost it promised ("seconds per row") never showed up.
+   A finding the owner reads now and acts on or drops is worth more than a row
+   answered later. Anything they do want to keep for later goes in the
+   hand-kept list in
+   `PROPOSALS.md`, which nothing writes automatically.
 
-   `--feature` is the slug the acceptance rate groups by (`curator-merge`,
-   `curator-archive`, `curator-delete`, …). Keep the row to one line: the
-   detail lives behind the evidence pointer. Proposers only *append* —
-   removing, reordering, or renumbering rows is the sweep's job alone.
+   Cap what surfaces proactively at three items — the CLAUDE.md notification
+   budget is three a day across every surface, and this pass is one of them.
 
-   Answered rows need no hand-written ledger line any more: `/flywheel`'s
-   sweep turns each `[x]`/`[-]` mark into the `acceptance`/`rejection` signal
-   that `flywheel-metrics.mjs` groups by feature. Only log a line by hand for
-   a decision that never went through `PROPOSALS.md`:
+10. **Commit without stealing another task's work.** Stage only the explicit
+    paths this pass created, moved or edited — never `git add -A`, `git add .`
+    or a wildcard. If this pass and a pre-existing change share one file,
+    stage only this pass's hunk or leave that file out and report it. Make
+    exactly one commit: `curator: consolidation <YYYY-MM-DD>` (ADR 0042).
 
-   ```
-   node .claude/hooks/append-signal.mjs acceptance feature:curator-merge ref:P-007
-   ```
-
-   A decision recorded only as prose in a log is invisible to the metric that
-   decides whether this pass survives.
-
-10. **Commit.** Stage everything touched by this pass and make exactly one
-    commit: `curator: consolidation <YYYY-MM-DD>`. The `Stop` hook's own
-    checkpoint commit is separate — this commit is the curator's explicit
-    record of what it changed and why.
-
-11. **Stamp the run.** Nothing is scheduled any more (ADR 0033); the
-    session-start due check is what remembers this pass exists, and it cannot
-    see a consolidation from the tree:
-
-    ```
-    node .claude/hooks/maintenance-stamp.mjs curator
-    ```
-
-    Skip this and the next session is told "curator never run" no matter how
-    well this pass went.
-
+11. **Nothing to stamp.** The maintenance stamp and the session-start due
+    line it fed were removed (ADR 0038). The owner runs this pass when they
+    want it; the vault does not tell them it is overdue.

@@ -24,14 +24,18 @@ scripts/.brain.lock
 # agent worktrees — never tracked in main
 .claude/worktrees/
 
-# machine state lives off the tracked tree (ADR 0032) — every file below is
-# derived, per machine and rebuild-tolerant. If a hook needs a counter, this is
-# where it goes; the durable half of the record is a ledger line in logs/.
+# machine state lives off the tracked tree (ADR 0032) — derived, per machine
+# and rebuild-tolerant. The one live sidecar is the shared daily notice
+# counter; the durable half of any record is a ledger line in logs/.
+.claude/.maintenance.json
+.claude/*.tmp
+
+# retired in v1.1 with the checkpoint, flush and reuse-telemetry hooks (ADR
+# 0038, 0039, 0042). Nothing writes these any more; the lines stay so that a
+# clone upgraded from v1.0 never commits the leftovers.
 .claude/.access.json
 .claude/.sessions.json
 .claude/.flush-*.lock
-.claude/*.tmp
-.claude/.maintenance.json
 scripts/.last-rollup
 scripts/.last-push
 

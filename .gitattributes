@@ -3,8 +3,10 @@
 *.mjs text eol=lf
 
 # append-only episodic files: keep both sides of a concurrent write
-_brain/logs/*.md merge=union
-_brain/logs/**/*.md merge=union
+# (session logs, the signal ledger). v1.0 still pointed these at the retired
+# _brain/ layout, so the rule matched nothing.
+logs/*.md merge=union
+logs/**/*.md merge=union
 
 # binary-ish single-file formats: never let git invent a merge
 *.canvas -merge

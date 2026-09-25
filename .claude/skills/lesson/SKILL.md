@@ -6,8 +6,8 @@ description: Captures a correction verbatim as a low-confidence lesson note plus
 # Lesson
 
 Captures a mistake the moment it's corrected, before the agent can talk itself
-into a fluent-but-false story about what went wrong. Full rationale: ADR 0019
-(`archive/0019-flywheel-capture-corroborate-enforce.md`).
+into a fluent-but-false story about what went wrong. Full rationale: ADR 0019,
+amended by 0038 (`docs/DECISIONS.md`).
 
 ## Trigger
 
@@ -23,10 +23,12 @@ Capture is mechanical, not analytical:
   diff, error message, or wrong output) — unchanged, no cleanup.
 - **Never** author an interpreted "lesson learned," generalize the mistake, or
   propose a fix. The confabulation risk (ADR 0019, arXiv:2605.29463) is that a
-  plausible narrative is worse than no narrative — interpretation is the
-  flywheel's job, later, from a fresh instance, after corroboration.
+  plausible narrative is worse than no narrative — interpretation comes
+  later, from a fresh instance, after corroboration. Since the `/flywheel`
+  pass was retired (ADR 0038) that later step is the owner's judgment, not a
+  pass's.
 - A correction **stays in the language it was given in**. Translation, if it
-  happens at all, happens at the flywheel pass — not here. A lesson's whole
+  happens at all, happens later — never here. A lesson's whole
   value is the correction verbatim.
 - The class slug assigned below is grouping for corroboration, not analysis —
   don't reach past the six listed slugs unless none of them fit.
@@ -63,5 +65,5 @@ Capture is mechanical, not analytical:
 
 A lesson note is a dated snapshot of what was believed wrong at that moment.
 It is never edited after capture. A better understanding of it is either a
-**new** note or the flywheel pass's job (corroboration, routing to a check or
-a `MEMORY.md` line) — never a rewrite of this file.
+**new** note or a later decision by the owner (once corroborated, routing it
+to a compiled check or a `MEMORY.md` line) — never a rewrite of this file.

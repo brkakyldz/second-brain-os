@@ -17,10 +17,15 @@ This is a *content* catalog. Its chronological twin is `logs/` (what happened,
 when), the durable-fact index is `core/MEMORY.md` (one line per fact, budgeted),
 and the open-work surface is `PROPOSALS.md`. Four files, four jobs, no overlap.
 
-**Who writes it:** `/ingest`, `/file` and `/curator`, on every write that adds
-or retires a page. The `index-coverage` check in `.claude/hooks/checks.mjs`
-fires when a note in `notes/` is missing here — the catalog is kept honest by an
-instrument, not by a reminder.
+**Who writes it:** whoever adds or retires a page — `/ingest`, `/file`,
+`/curator`, or a session writing a note by hand. All four are the same
+responsibility: a note without a row here is a page nothing can find.
+
+**What keeps it honest:** `node scripts/link-sweep.mjs`, which compares every
+file in `notes/` against this table and takes no view of git at all, and the
+`index-coverage` check in `.claude/hooks/checks.mjs` for the files a task has
+changed. Both are **warnings, not gates** — a missing row is reported, never
+blocked (ADR 0035, 0038).
 
 Keep the description column about *what the page is for*, not what it contains.
 A row that reads "notes on X" tells a future session nothing it could not have
@@ -51,13 +56,14 @@ open without opening it.
 
 | Page | What it is | Status |
 |---|---|---|
-| [[lifecycle-policy]] | The full lifecycle and self-evolution policy with rationale; binding rules live in `CLAUDE.md` | active |
+| [[lifecycle-policy]] | What happens to a note or a fact, with rationale; binding rules live in `CLAUDE.md` | active |
+| [[self-evolution-policy]] | How the vault changes itself — the maintenance loop, growth control, the noise budget | active |
 
 ## Lessons — corrections, captured verbatim
 
 Kept in the language the correction was given in: a lesson's value is the
-wording as it was said. Routed by the flywheel pass only after a second
-independent occurrence.
+wording as it was said. Routed to a check or a `MEMORY.md` line only after a
+second independent occurrence, and only when the owner decides to.
 
 | Page | The correction | Status |
 |---|---|---|

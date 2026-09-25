@@ -41,11 +41,13 @@ breaks because a thought grew up.
   record. Never deleted, always moved here.
 - `.claude/` — the machinery: `hooks/`, `skills/`, `templates/`, `eval/`. Not
   vault content; this is how the agent runs, not what it knows about the world.
-- `scripts/` — helper jobs (link sweep, metrics, the proposals sweep), each
-  invoked by hand or by a skill. Nothing here runs on a clock.
+- `scripts/` — helper jobs (link sweep, metrics, retrieval eval), each
+  invoked by hand or by a skill. Nothing here runs on a clock:
+  unattended scheduling was retired (ADR 0033).
 - Root files: `INDEX.md` is the page catalog — every note, one line each, the
-  first thing to read when answering a question. `PROPOSALS.md` is the one
-  approval surface. `README.md` is the vault's front door.
+  first thing to read when answering a question. `PROPOSALS.md` is a list of
+  open work the owner keeps by hand — no pass writes it. `README.md` is the
+  vault's front door.
 
 ## Distillation
 
@@ -99,7 +101,9 @@ the owner saving what they are reading — which is the property an inbox lacks.
 
 ## Lifecycle & self-evolution
 
-Full policy with rationale: [[lifecycle-policy]]. The binding rules:
+Full policy with rationale: [[lifecycle-policy]] (what happens to a note or a
+fact) and [[self-evolution-policy]] (how the system changes itself). The
+binding rules:
 
 - **Tiers.** Tier 0 (`IDENTITY.md` 40 lines / `USER.md` 2000 chars /
   `MEMORY.md` 4000 chars) is always loaded and holds pointers, not detail.
@@ -135,21 +139,23 @@ Full policy with rationale: [[lifecycle-policy]]. The binding rules:
   `description:` — good enough to judge relevance without opening the file.
 - **Protected files:** `IDENTITY.md` and this file are never edited by an
   automated pass — agents propose a diff, the owner applies it.
-- **Pins:** `pinned: true` exempts from demotion; max 10 vault-wide,
-  re-justified quarterly.
-- **The loop:** the trigger is the owner opening a session, never a clock. A
-  session-start due line reports what has gone stale; they run `/curator` (safe
-  fixes applied, destructive changes proposed as a table) or `/flywheel` when
-  they see it. The structural audit stays report-only — budgets, orphans,
-  overdue reviews, tag sprawl — and audit and consolidation stay separate
-  passes.
+- **Pins:** `pinned: true` exempts from demotion; max 10 vault-wide.
+- **The loop:** the trigger is the owner opening a session, never a clock
+  (ADR 0033), and nothing reports a pass as overdue (ADR 0038). They run
+  `/curator` (safe fixes applied, destructive changes reported and left to
+  them) when they want it. The structural audit stays report-only — budgets,
+  orphans, overdue reviews, tag sprawl — and audit and consolidation stay
+  separate passes. Pins and policy get re-justified when the audit says they
+  need it, not on a calendar.
 - **Notification budget:** hard cap **3 proactive items per day**, counted
-  across *all* surfaces together (session start, briefs, alerts, proposals).
+  across *all* surfaces together (session start, briefs, alerts, pass reports).
   Everything past the cap becomes a pull artifact — a file the owner opens when
   they want it, never a push. False positives kill a review queue permanently.
-- **Acceptance logging:** every agent suggestion (link, MOC, pair, proposal) is
-  logged with accept/reject in `logs/`. Acceptance rate is the master metric —
-  a suggestion feature that isn't accepted gets killed, not tuned forever.
+- **Suggestions are acted on or dropped, not queued.** A pass reports its
+  findings in the conversation and its own log; nothing appends to an approval
+  queue (ADR 0038). A suggestion feature that is not acted on gets killed, not
+  tuned forever. A decision worth recording may still be logged by hand as an
+  `acceptance` / `rejection` line in the signal ledger.
 - **Growth control:** no new folder/tag/taxonomy without an actual retrieval
   failure that demands it. Health metric is notes *re-used* this month, not
   notes captured. **No new hook or script without an actual failure that
@@ -200,6 +206,12 @@ discovery | preference | change`. If a durable fact emerged, also update
 ## Sync rules
 
 - Pull before you write.
+- **Commits are task-owned (ADR 0042, 0044).** No hook commits for you, and no
+  task stages the whole tree: several sessions may work in this checkout at
+  the same time. Stage the explicit paths your task wrote, commit once with a
+  message that names the work, and leave every other dirty file alone — it
+  belongs to whoever created it. `git add -A` / `git add .` are never part of
+  the protocol.
 - Never run a second sync mechanism (iCloud, Google Drive, Syncthing) over
   this folder — one sync mechanism per vault, ever.
 - Push failures are non-fatal: the commit stays local and syncs on the next

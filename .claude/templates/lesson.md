@@ -9,7 +9,7 @@ class: <mistake-class-slug>
 related: []
 ---
 
-<!-- CAPTURE ONLY. Verbatim, no interpretation — routing happens at the flywheel pass after a second independent occurrence corroborates it (ADR 0019). -->
+<!-- CAPTURE ONLY. Verbatim, no interpretation — routing happens later, by the owner's decision, after a second independent occurrence corroborates it (ADR 0019, 0038). -->
 
 # Lesson — <mistake-class-slug>
 

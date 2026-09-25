@@ -1,8 +1,9 @@
-// Shared helpers for the write-path hooks (Stop / SessionEnd / PreCompact).
+// Shared helpers for the SessionStart hook and the scripts under scripts/.
+// Since v1.1 no hook writes to git: commits are task-owned (ADR 0042, 0044).
 // Fail-open by design (ADR 0004): every code path must exit 0. Nothing in
 // here throws past its caller — callers still wrap in try/catch as a backstop.
 
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import {
   readFileSync,
   writeFileSync,
@@ -163,8 +164,6 @@ export function getGitDir(repoRoot) {
   }
 }
 
-// Guards, in order: rebase/merge in progress, or unmerged paths present.
-// Returns { blocked: boolean, reason: string|null }.
 // The vault activation gate (ADR 0014). Every hook is inert without the
 // core/.vault-active marker: no pull, no checkpoint commit, no push, no
 // Tier-0 injection. It is what keeps the public template — and a clone that
@@ -178,76 +177,21 @@ export function isVaultActive(repoRoot) {
   }
 }
 
-export function checkGuards(repoRoot) {
-  const gitDir = getGitDir(repoRoot);
-  if (gitDir) {
-    if (
-      existsSync(path.join(gitDir, 'rebase-merge')) ||
-      existsSync(path.join(gitDir, 'rebase-apply'))
-    ) {
-      return { blocked: true, reason: 'rebase in progress' };
-    }
-    if (existsSync(path.join(gitDir, 'MERGE_HEAD'))) {
-      return { blocked: true, reason: 'merge in progress' };
-    }
-  }
-
-  try {
-    const unmerged = execFileSync('git', ['ls-files', '-u'], {
-      cwd: repoRoot,
-      timeout: 10000,
-      encoding: 'utf8',
-      windowsHide: true,
-    }).trim();
-    if (unmerged !== '') {
-      return { blocked: true, reason: 'unmerged paths present' };
-    }
-  } catch (err) {
-    // If we can't even ask, be conservative and refuse to commit.
-    return { blocked: true, reason: `git ls-files -u failed: ${summarizeError(err)}` };
-  }
-
-  return { blocked: false, reason: null };
-}
-
-// UTC, minute precision, with an explicit Z. The Signal Ledger stamps in UTC
-// (signalStamp), so a local-time commit subject made the two records look
-// hours apart on any non-UTC machine — 17:21 next to 14:21Z on UTC+3 — and
-// made `git log` unorderable against the ledger by eye.
-function formatTimestamp(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}Z`;
-}
-
-export function buildCommitMessage(eventLabel, sessionId) {
-  const stamp = formatTimestamp(new Date());
-  const sid = sessionId && String(sessionId).trim() !== '' ? sessionId : 'unknown';
-  return [
-    `checkpoint(${eventLabel}): ${stamp}`,
-    '',
-    `Session: ${sid}`,
-    '',
-    'Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>',
-  ].join('\n');
-}
-
 // --- Shared lock --------------------------------------------------------
 // Same on-disk protocol as the retired PowerShell side (archive/lock.ps1,
-// unscheduled 2026-08-30, ADR 0033) — kept because two Claude sessions can
-// still run concurrently:
+// unscheduled 2026-08-30, ADR 0033) — kept because two agent sessions, in
+// either runtime, can still run concurrently:
 // scripts/.brain.lock holds a single line "<PID> <ISO-8601 UTC> <owner>".
 // A lock whose PID is dead, or that is older than 2h, is stale and gets
 // broken by the next acquirer.
 //
-// Why the hooks need it: SessionStart/Stop/SessionEnd all run git against the
-// one vault repo, and several Claude Code sessions (plus agent worktrees) fire
-// them concurrently. Two `git pull` runs racing on .git/FETCH_HEAD produce
-// "Cannot rebase onto multiple branches"; two `git add`/`git commit` runs
-// racing produce "Unable to create '.git/index.lock'".
+// Why it is still needed: every session on the machine runs SessionStart
+// against the one vault repo, in Claude Code and in Codex, and two `git pull`
+// runs racing on .git/FETCH_HEAD produce "Cannot rebase onto multiple
+// branches". Signal-ledger appends take the same lock.
 //
 // Contention policy is skip, never wait: a missed pull is harmless (we work
-// from local state) and a missed checkpoint is picked up by the next Stop.
-// Blocking would stall the session, which ADR 0004 forbids.
+// from local state). Blocking would stall the session, which ADR 0004 forbids.
 
 const LOCK_STALE_MS = 2 * 60 * 60 * 1000;
 
@@ -364,8 +308,8 @@ function sleepSync(ms) {
 //
 // Retry budget must stay small: hooks have a 30s timeout and ADR 0004 forbids
 // stalling a session. The default is still a single attempt (skip-not-wait);
-// only callers that cannot be retried later — SessionEnd is terminal — ask
-// for more.
+// only callers that cannot be retried later — a signal append has no later
+// run to pick it up — ask for more.
 export function acquireBrainLock(repoRoot, owner, logTag, { attempts = 1, delayMs = 300 } = {}) {
   if (ownsBrainLock(repoRoot)) return { ok: true, reentrant: true };
   const tries = Number.isFinite(attempts) && attempts > 0 ? Math.min(attempts, 10) : 1;
@@ -398,9 +342,12 @@ export function exitBrainLock(repoRoot) {
 }
 
 // --- Secret guard -----------------------------------------------------
-// Run on the staged file list after `git add -A` and before commit. Never
-// blocks and never deletes content: offending files are reset out of the
-// index (working tree untouched) so the commit proceeds without them.
+// Written for the retired checkpoint commit, which ran it on every Stop. Since
+// commits became task-owned (ADR 0042, 0044) nothing calls it automatically;
+// it is kept as reusable code. The scan that actually runs, once installed, is
+// gitleaks via `.pre-commit-config.yaml`. Never blocks and never deletes
+// content: offending files are reset out of the index (working tree untouched)
+// so the commit proceeds without them.
 
 const SECRET_PATTERNS = [
   { name: 'AWS access key', re: /AKIA[0-9A-Z]{16}/ },
@@ -540,205 +487,65 @@ export function budgetUsage(repoRoot) {
   return rows;
 }
 
-// Checks core/MEMORY.md and core/USER.md against their character budgets.
-// Returns an array of { file, count, limit, pct } for files currently over
-// budget. Never mutates anything — pure check.
-export function checkBudgets(repoRoot, logTag) {
-  const overBudget = [];
-  for (const b of budgetUsage(repoRoot)) {
-    if (b.count > b.limit) {
-      overBudget.push(b);
-      logLine(repoRoot, logTag, `budget exceeded: ${b.file} (${b.count}/${b.limit} chars)`);
-    }
-  }
-  return overBudget;
-}
-
-// The signal ledger is no longer written on every turn (the session trace
-// moved to a gitignored sidecar, ADR 0032), so a staged `logs/signals/` diff
-// now means a real event landed — a correction, a digest, a rollup. Those are
-// worth a commit, which is why the old `skipIfTraceOnly` heuristic is gone
-// rather than kept: the churn it papered over no longer exists.
-
-// --- push debounce ------------------------------------------------------
-// Every turn used to cost a network push with a 20s timeout. The commit is
-// what bounds data loss (ADR 0004); the push only bounds how stale GitHub is,
-// and GitHub is sync, not the database (CLAUDE.md § Sync rules). So Stop
-// pushes at most once per window; every terminal or rare event still pushes
-// immediately. Timestamp lives beside the brain lock and is gitignored.
-const DEFAULT_PUSH_DEBOUNCE_MS = 15 * 60 * 1000;
-const ALWAYS_PUSH_EVENTS = new Set(['session-end', 'flush', 'precompact']);
-
-function pushStampPath(repoRoot) {
-  return path.join(repoRoot, 'scripts', '.last-push');
-}
-
-function pushDebounceMs() {
-  const v = Number(process.env.BRAIN_PUSH_DEBOUNCE_MS);
-  return Number.isFinite(v) && v >= 0 ? v : DEFAULT_PUSH_DEBOUNCE_MS;
-}
-
-function shouldPush(repoRoot, eventLabel) {
-  if (ALWAYS_PUSH_EVENTS.has(eventLabel)) return true;
-  const window = pushDebounceMs();
-  if (window === 0) return true;
-  const raw = readFileSafe(pushStampPath(repoRoot));
-  if (raw === null) return true;
-  const last = Date.parse(raw.trim());
-  if (!Number.isFinite(last)) return true;
-  return Date.now() - last >= window;
-}
-
-function recordPush(repoRoot) {
+// --- delivery state -----------------------------------------------------
+// "Is anything on this branch still only on this machine?" — asked separately
+// from "did this invocation create a commit", because the two come apart. The
+// push debounce commits without pushing, so a session can end perfectly clean
+// while a real backlog sits on disk (observed 2026-09-05: the 20:58Z commit
+// was still local when the 21:05Z SessionEnd ran and found nothing to stage).
+//
+// ok:false means the question could not be answered — no upstream, detached
+// HEAD, git missing, remote unreachable. That is *unknown*, never "in sync":
+// callers must not read a failure here as proof the work is backed up.
+function unpushedCommits(repoRoot) {
   try {
-    writeFileSync(pushStampPath(repoRoot), new Date().toISOString(), { encoding: 'utf8' });
-  } catch {
-    // best effort — a missing stamp just means the next Stop pushes
-  }
-}
-
-// The git-touching half of a checkpoint. Always called with the shared brain
-// lock held (see checkpointCommit) so no other hook or scheduled job can be
-// inside `git add`/`git commit` at the same time.
-function commitUnderLock(
-  repoRoot,
-  { eventLabel, sessionId, pushTimeoutMs, logTag },
-  messages
-) {
-  const guard = checkGuards(repoRoot);
-  if (guard.blocked) {
-    logLine(repoRoot, logTag, `guard tripped (${guard.reason}) — skipping commit`);
-    return { committed: false, reason: 'guard', guardReason: guard.reason, messages };
-  }
-
-  try {
-    execFileSync('git', ['add', '-A'], {
-      cwd: repoRoot,
-      timeout: 20000,
-      encoding: 'utf8',
-      windowsHide: true,
-    });
-  } catch (err) {
-    logLine(repoRoot, logTag, `git add -A failed: ${summarizeError(err)}`);
-    return { committed: false, reason: 'add-failed', messages };
-  }
-
-  const secretResult = scanStagedForSecrets(repoRoot, logTag);
-  for (const file of secretResult.offendingFiles) {
-    messages.push(`⚠ possible secret in ${file} — left uncommitted, review it`);
-  }
-
-  let stagedFiles;
-  try {
-    stagedFiles = execFileSync('git', ['diff', '--cached', '--name-only'], {
+    const out = execFileSync('git', ['rev-list', '--count', '@{upstream}..HEAD'], {
       cwd: repoRoot,
       timeout: 10000,
+      // stderr piped, not inherited: outside a repo (or with no upstream) git
+      // writes straight to the session's stderr otherwise.
+      stdio: ['ignore', 'pipe', 'pipe'],
       encoding: 'utf8',
       windowsHide: true,
-    })
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
+    }).trim();
+    const count = Number(out);
+    if (!Number.isFinite(count)) return { ok: false, reason: `unreadable rev-list output: ${out.slice(0, 60)}` };
+    return { ok: true, count };
   } catch (err) {
-    logLine(repoRoot, logTag, `git diff --cached --name-only failed: ${summarizeError(err)}`);
-    return { committed: false, reason: 'diff-check-failed', messages };
+    return { ok: false, reason: summarizeError(err) };
   }
-
-  const hasStaged = stagedFiles.length > 0;
-
-  let result;
-  if (!hasStaged) {
-    logLine(repoRoot, logTag, 'nothing staged — skipping commit');
-    result = { committed: false, reason: 'clean', messages };
-  } else {
-    const message = buildCommitMessage(eventLabel, sessionId);
-    try {
-      execFileSync('git', ['commit', '-m', message], {
-        cwd: repoRoot,
-        timeout: 20000,
-        encoding: 'utf8',
-      windowsHide: true,
-      });
-      logLine(repoRoot, logTag, `committed (${eventLabel})`);
-    } catch (err) {
-      logLine(repoRoot, logTag, `git commit failed: ${summarizeError(err)}`);
-      return { committed: false, reason: 'commit-failed', messages };
-    }
-
-    if (!shouldPush(repoRoot, eventLabel)) {
-      logLine(repoRoot, logTag, `push debounced (${eventLabel}) — commit is safe locally`);
-      result = { committed: true, pushed: false, pushDeferred: true, messages };
-    } else {
-      try {
-        execFileSync('git', ['push'], {
-          cwd: repoRoot,
-          timeout: pushTimeoutMs,
-          encoding: 'utf8',
-          windowsHide: true,
-        });
-        logLine(repoRoot, logTag, 'push ok');
-        recordPush(repoRoot);
-        result = { committed: true, pushed: true, messages };
-      } catch (err) {
-        logLine(repoRoot, logTag, `push failed (commit is safe locally): ${summarizeError(err)}`);
-        result = { committed: true, pushed: false, messages };
-      }
-    }
-  }
-
-  return result;
 }
 
-// Stages everything, scans for secrets, commits if there is something staged,
-// best-effort pushes, and checks size budgets. Returns a result object
-// describing what happened, including any warning messages meant for the
-// hook's stdout systemMessage.
+// Commit date of the OLDEST commit the remote has not seen.
 //
-// Serialized on the shared brain lock: concurrent sessions running `git add`
-// against one repo collide on .git/index.lock. A run that cannot take the lock
-// is skipped rather than queued — the next Stop checkpoint picks the work up,
-// and blocking the session is not allowed (ADR 0004).
-export function checkpointCommit(
-  repoRoot,
-  { eventLabel, sessionId, pushTimeoutMs, logTag }
-) {
-  const messages = [];
-
-  // Reentrant: SessionEnd takes the lock once around trace+commit, so this
-  // acquire is frequently a no-op that must not release the outer section.
-  const handle = acquireBrainLock(repoRoot, logTag, logTag);
-  let result;
-  if (!handle.ok) {
-    result = { committed: false, reason: 'locked', messages };
-  } else {
-    try {
-      result = commitUnderLock(
-        repoRoot,
-        { eventLabel, sessionId, pushTimeoutMs, logTag },
-        messages
-      );
-    } finally {
-      releaseBrainLock(repoRoot, handle);
-    }
+// `git log --reverse --format=%cI -1 @{upstream}..HEAD` does not answer this,
+// which is the bug this replaces: git applies the -1 limit while walking the
+// history newest-first and reverses only what survived, so it returns the
+// NEWEST unpushed commit. Every new checkpoint therefore reset the reported
+// backlog age to zero, and a week-old unpushed commit read as "0d" forever.
+// Take the whole list and read its last line instead.
+function oldestUnpushedISO(repoRoot) {
+  try {
+    const out = execFileSync('git', ['log', '--format=%cI', '@{upstream}..HEAD'], {
+      cwd: repoRoot,
+      timeout: 10000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      windowsHide: true,
+    }).trim();
+    if (out === '') return null;
+    const lines = out.split(/\r?\n/).filter((l) => l.trim() !== '');
+    return lines.length > 0 ? lines[lines.length - 1].trim() : null;
+  } catch {
+    return null;
   }
-
-  // Budget guard: a pure read, so it runs outside the lock and on every run —
-  // whether or not this one had anything to commit, or got the lock at all —
-  // so a file edited outside the hook still gets flagged.
-  // The .automation.log line is written every run — that is the evidence trail.
-  // What the owner *sees* is capped at one a day by budgetNoticeDue, because Stop
-  // fires every turn and the file stays over budget until someone consolidates.
-  const overBudget = checkBudgets(repoRoot, logTag);
-  if (overBudget.length > 0 && budgetNoticeDue(repoRoot)) {
-    for (const b of overBudget) {
-      messages.push(
-        `⚠ ${b.file} over budget (${b.count}/${b.limit} chars) — run /curator to consolidate`
-      );
-    }
-  }
-
-  return result;
 }
+
+// The checkpoint commit that lived here (`git add -A` + commit + push on every
+// Stop/SessionEnd) was retired with ADR 0042/0044: with two runtimes able to
+// work in one checkout, a whole-tree commit takes another task's half-written
+// files with it. The pre-removal file is in this repo's `v1.0` tag. Commits
+// are task-owned now; the secret guard above is kept for reuse.
 
 export function readFileSafe(p) {
   try {
@@ -755,18 +562,17 @@ export function readFileSafe(p) {
 // of this file: a ledger write must never break a session.
 
 export const SIGNAL_TYPES = [
-  // 'session' was retired in ADR 0032 — the per-turn trace lives in the
-  // gitignored `.claude/.sessions.json` sidecar, not in this ledger.
+  // 'session' was retired in ADR 0032, and its sidecar replacement went with
+  // the flush mechanism in 2026-09. Nothing counts turns any more.
   'correction',
   'retrieval-failure',
   'acceptance',
   'rejection',
   'check-fire',
   'retrieval-rollup',
-  // One line per session the flush mechanism handled — either the digest it
-  // wrote or the reason it stood down. Also the flush's idempotency key, which
-  // is why it is a ledger type and not a state file: the record and the guard
-  // are the same fact.
+  // Historical: one line per session the retired flush mechanism handled.
+  // Nothing writes this any more; the type stays listed so the existing lines
+  // remain valid ledger content rather than becoming unparseable history.
   'session-digest',
 ];
 
@@ -817,12 +623,12 @@ function ensureSignalsFile(repoRoot, d) {
 
 // Appends one typed line. `payload` is a string or an array of `k:v` fields.
 //
-// Serialized on the brain lock. Without it this bare append raced
-// recordSessionTrace's read-modify-write of the same file: the trace reads
-// the ledger, an appendSignal lands, and the trace's writeFileSync of the
-// stale buffer erases the new line. Reentrant, because appendSignal is
+// Serialized on the brain lock. It was added when the retired session trace
+// did a read-modify-write of this same file and could erase a line appended
+// between its read and its write; the lock stays because two concurrent
+// sessions can still append at once. Reentrant, because appendSignal is
 // reachable from callers that may already hold the lock (checks.mjs →
-// runChecks, invoked from the checkpoint path).
+// runChecks, when a caller runs the checks under the lock).
 //
 // Contention policy differs from the rest of the file on purpose: a signal
 // has no later run to pick it up, so a short retry is tried and, failing
@@ -853,350 +659,27 @@ export function appendSignal(repoRoot, { type, payload, sessionId, logTag, when 
   }
 }
 
-// --- Session trace sidecar (ADR 0032, supersedes ADR 0020's ledger line) --
-// The trace used to be a `| session |` line in the durable ledger. That made
-// every turn a tracked-tree change, so every turn bought a checkpoint commit:
-// 61 of 109 ledger lines and 188 of the vault's commits were this one counter
-// ticking, which is what stopped `git log` from being readable as the audit
-// trail CLAUDE.md promises.
-//
-// The trace is machine state for the flush mechanism, not evidence. Its only
-// two readers — flush.mjs and the SessionStart sweep — consume it within days
-// and discard it, so it lives off the tracked tree now. The durable half of
-// the record, the `session-digest` line, stays in the ledger: that is what
-// makes a flushed session stay flushed even if this file is lost.
-const SESSIONS_SIDECAR_VERSION = 1;
-const SESSIONS_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// The session-trace sidecar (ADR 0032) was removed with the flush mechanism
+// it existed for (simplification plan, Phase 2). Its readers were flush.mjs
+// and the SessionStart sweep, both gone; `.claude/.sessions.json` is
+// gitignored machine state, so nothing tracked depends on it. Sessions that
+// were already digested keep their `session-digest` ledger lines as history.
 
-export function sessionsSidecarPath(repoRoot) {
-  return path.join(repoRoot, '.claude', '.sessions.json');
-}
-
-function readSessionsSidecar(repoRoot) {
-  const empty = { version: SESSIONS_SIDECAR_VERSION, sessions: {} };
-  try {
-    const text = readFileSafe(sessionsSidecarPath(repoRoot));
-    if (text === null) return empty;
-    const data = JSON.parse(text);
-    if (!data || typeof data !== 'object' || !data.sessions || typeof data.sessions !== 'object') {
-      return empty;
-    }
-    return { version: SESSIONS_SIDECAR_VERSION, sessions: data.sessions };
-  } catch {
-    // A truncated buffer is not worth failing a turn over: start clean. The
-    // cost is at most a few sessions nobody summarizes.
-    return empty;
-  }
-}
-
-// Entries outlive their usefulness the moment the sweep stops considering
-// them (3 days), but a month of slack costs a few KB and keeps the file
-// debuggable after the fact.
-function pruneSessionsSidecar(data, now) {
-  const cutoff = now.getTime() - SESSIONS_MAX_AGE_MS;
-  for (const [sid, entry] of Object.entries(data.sessions)) {
-    const t = Date.parse((entry && (entry.lastAt || entry.startedAt)) || '');
-    if (Number.isFinite(t) && t < cutoff) delete data.sessions[sid];
-  }
-}
-
-// `mode` 'increment' (Stop) counts a turn; 'touch' (SessionEnd / PreCompact)
-// only makes sure the entry exists. A session that never did a turn has
-// nothing to trace — logged at most once per process so an idle session in an
-// unrelated directory cannot spam the automation log either.
-//
-// No brain lock, by the same argument as the reuse sidecar: this is on the
-// per-turn hot path, a lost update costs one turn off a counter, and taking
-// the lock here is exactly what SessionEnd kept burning its retry budget on
-// ("lock held by SessionStart — skipping this run", 2026-08-27).
-let ghostSkipLogged = false;
-
-export function recordSessionTrace(repoRoot, { sessionId, projectDir, mode = 'touch', logTag }) {
-  if (!sessionId) {
-    if (logTag) logLine(repoRoot, logTag, 'no session id — trace skipped');
-    return { written: false, reason: 'no-session-id' };
-  }
-  try {
-    const sid = String(sessionId);
-    const now = new Date();
-    const data = readSessionsSidecar(repoRoot);
-    const entry = data.sessions[sid];
-
-    if (!entry) {
-      // Ghost-session gate: no first turn, no entry. Deliberately not gated
-      // on cwd — a real turn from any directory still traces (global brain
-      // mode); it is emptiness that disqualifies, not location.
-      if (mode !== 'increment') {
-        if (logTag && !ghostSkipLogged) {
-          ghostSkipLogged = true;
-          logLine(repoRoot, logTag, 'session trace skipped (turns:0)');
-        }
-        return { written: false, reason: 'no-turns' };
-      }
-      data.sessions[sid] = {
-        project: sanitizeField(String(projectDir || process.cwd()).replace(/\\/g, '/')),
-        turns: 1,
-        startedAt: signalStamp(now),
-        lastAt: signalStamp(now),
-      };
-      pruneSessionsSidecar(data, now);
-      writeJsonAtomic(sessionsSidecarPath(repoRoot), data);
-      if (logTag) logLine(repoRoot, logTag, 'session trace opened (turns:1)');
-      return { written: true, turns: 1, opened: true };
-    }
-
-    const current = Number(entry.turns || 0);
-    // 'touch' still reports the count it found: callers ask how big a session
-    // was without wanting to grow it.
-    if (mode !== 'increment') return { written: false, reason: 'exists', turns: current };
-
-    entry.turns = current + 1;
-    entry.lastAt = signalStamp(now);
-    pruneSessionsSidecar(data, now);
-    writeJsonAtomic(sessionsSidecarPath(repoRoot), data);
-    return { written: true, turns: entry.turns, opened: false };
-  } catch (err) {
-    if (logTag) logLine(repoRoot, logTag, `session trace failed: ${summarizeError(err)}`, 'WARN');
-    return { written: false, reason: 'error' };
-  }
-}
-
-// Every trace the sidecar still holds, newest first. flush.mjs needs the
-// whole set, not just its own: the upper bound of "the window this session
-// could have written a log in" is the next session's start.
-export function allSessionTraces(repoRoot) {
-  try {
-    const out = [];
-    for (const [sid, entry] of Object.entries(readSessionsSidecar(repoRoot).sessions)) {
-      const startedAt = new Date(Date.parse((entry && entry.startedAt) || ''));
-      if (Number.isNaN(startedAt.getTime())) continue;
-      out.push({ sid, turns: Number(entry.turns || 0), startedAt });
-    }
-    return out.sort((a, b) => b.startedAt - a.startedAt);
-  } catch {
-    return [];
-  }
-}
-
-// One session's trace, or null when it was never opened.
-export function sessionTrace(repoRoot, sessionId) {
-  try {
-    const entry = readSessionsSidecar(repoRoot).sessions[String(sessionId)];
-    if (!entry) return null;
-    const startedAt = new Date(Date.parse(entry.startedAt || ''));
-    if (Number.isNaN(startedAt.getTime())) return null;
-    return { sid: String(sessionId), turns: Number(entry.turns || 0), startedAt };
-  } catch {
-    return null;
-  }
-}
-
-// --- Reuse rollup scheduling (ADR 0032) ---------------------------------
-// The rollup that folds the reuse buffer into one durable `retrieval-rollup`
-// ledger line was wired into exactly one caller: B5, the weekly `claude -p`
-// maintenance job. No scheduled task was ever registered, so B5 never ran, so
-// in two days the vault recorded 42 reuse events and zero durable lines — the
-// only evidence behind Q-14 sat in a gitignored buffer one `git clean` from
-// gone.
-//
-// The rollup is deterministic and takes milliseconds, so it belongs on the
-// cheapest reliable trigger there is rather than on the most fragile one.
-// Run synchronously and *before* the session-end lock: the new ledger line
-// then rides along in the same checkpoint, and the child process is not
-// fighting this one for the brain lock.
-const ROLLUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
-
-function rollupStampPath(repoRoot) {
-  return path.join(repoRoot, 'scripts', '.last-rollup');
-}
-
-export function runRollupIfDue(repoRoot, logTag) {
-  try {
-    const script = path.join(repoRoot, 'scripts', 'flywheel-metrics.mjs');
-    if (!existsSync(script)) return false;
-
-    // Nothing read, nothing to roll: an empty buffer would only write a line
-    // saying so.
-    const buffered = readAccessSidecar(repoRoot);
-    if (Object.keys(buffered.notes || {}).length === 0) return false;
-
-    const stamp = rollupStampPath(repoRoot);
-    if (existsSync(stamp)) {
-      const t = Number(readFileSafe(stamp));
-      if (Number.isFinite(t) && Date.now() - t < ROLLUP_INTERVAL_MS) return false;
-    }
-    // Stamped before the run, not after: a rollup that crashes must not turn
-    // into a retry on every session end.
-    writeFileSync(stamp, String(Date.now()), 'utf8');
-
-    execFileSync(process.execPath, [script, '--rollup'], {
-      cwd: repoRoot,
-      timeout: 15000,
-      encoding: 'utf8',
-      windowsHide: true,
-      stdio: 'ignore',
-    });
-    if (logTag) logLine(repoRoot, logTag, 'reuse rollup written (weekly window elapsed)');
-    return true;
-  } catch (err) {
-    if (logTag) logLine(repoRoot, logTag, `reuse rollup failed (non-fatal): ${summarizeError(err)}`, 'WARN');
-    return false;
-  }
-}
-
-// --- Session flush trigger --------------------------------------------
-
-// Turn threshold below which a session is not worth a flush. Shared because
-// three call sites must agree on it: flush.mjs refuses to summarize under it,
-// the SessionStart sweep will not retry under it, and SessionEnd uses it to
-// decide that a trace line nobody will ever read is not worth a commit.
-export const FLUSH_MIN_TURNS = 3;
-
-// Launches flush.mjs fully detached. Both callers are on a latency-critical
-// path — SessionEnd runs while the process is already exiting, SessionStart
-// while the user waits for the prompt — so nothing here may be awaited: the
-// child outlives this process, writes its own log, and takes its own lock.
-//
-// A flush is never spawned from inside a flush: the summarizer child runs with
-// BRAIN_FLUSH=1, and flush.mjs refuses to start when it sees it.
-export function spawnFlush(repoRoot, { sessionId, transcriptPath, logTag }) {
-  if (!sessionId) return false;
-  if (process.env.BRAIN_FLUSH === '1') return false;
-  try {
-    const script = path.join(repoRoot, '.claude', 'hooks', 'flush.mjs');
-    if (!existsSync(script)) return false;
-    const args = [script, '--sid', String(sessionId)];
-    if (transcriptPath) args.push('--transcript', String(transcriptPath));
-    const child = spawn(process.execPath, args, {
-      cwd: repoRoot,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    child.unref();
-    if (logTag) logLine(repoRoot, logTag, `flush spawned for ${sessionId}`);
-    return true;
-  } catch (err) {
-    if (logTag) logLine(repoRoot, logTag, `flush spawn failed: ${summarizeError(err)}`, 'WARN');
-    return false;
-  }
-}
-
-// Every session the flush mechanism already handled — a digest it wrote, or
-// the reason it stood down. The ledger is the idempotency key, and it is
-// deliberately the durable half of the pair: the candidate list can be lost
-// without harm, but "already summarized" must survive, or a wiped sidecar
-// would re-flush months of sessions.
-export function digestedSessionIds(repoRoot) {
-  const seen = new Set();
-  try {
-    const now = new Date();
-    const prev = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15));
-    for (const f of [signalsPath(repoRoot, prev), signalsPath(repoRoot, now)]) {
-      const text = existsSync(f) ? readFileSafe(f) : null;
-      if (!text) continue;
-      for (const line of text.split('\n')) {
-        if (!line.startsWith('- ') || !line.includes('| session-digest |')) continue;
-        const sid = (line.match(/sid:([^\s|]+)/) || [])[1];
-        if (sid) seen.add(sid);
-      }
-    }
-  } catch {
-    // An unreadable ledger means "nothing handled yet" — the per-session
-    // flush claim below is what still stops a double summary.
-  }
-  return seen;
-}
-
-// Sessions the flush mechanism still owes a decision on: they have a trace
-// entry in the sidecar, no `session-digest` line in the ledger, and are not
-// the session asking. Newest first, because a sweep that can only afford a
-// couple of calls should spend them on the sessions most likely to still
-// matter.
-export function pendingFlushSessions(repoRoot, { excludeSid } = {}) {
-  try {
-    const done = digestedSessionIds(repoRoot);
-    const data = readSessionsSidecar(repoRoot);
-    const pending = [];
-    for (const [sid, entry] of Object.entries(data.sessions)) {
-      if (!entry || sid === excludeSid || done.has(sid)) continue;
-      const startedAt = new Date(Date.parse(entry.startedAt || ''));
-      if (Number.isNaN(startedAt.getTime())) continue;
-      pending.push({ sid, turns: Number(entry.turns || 0), startedAt });
-    }
-    return pending.sort((a, b) => b.startedAt - a.startedAt);
-  } catch {
-    return [];
-  }
-}
-
-// --- Reuse telemetry sidecar (A1-R, ADR 0011 §"derived instrumentation") ---
-// The hot path of the reuse metric. A PostToolUse hook fires on every Read /
-// Grep / Glob in every project (hooks are machine-wide, ADR 0008), so this
-// path must never take the brain lock, call git, or scan the vault: it reads
-// one small JSON file, maybe writes it back, and exits.
-//
-// The file is gitignored and rebuild-tolerant by design — the durable record
-// is the weekly `retrieval-rollup` ledger line, not this buffer. Losing it
-// costs at most one week of counts, which is why no locking is warranted:
-// a lost update under concurrency is cheaper than a lock on this path.
-
-const ACCESS_SIDECAR_VERSION = 1;
-// Bounds the file: distinct sessions remembered per note, for dedup.
-const ACCESS_MAX_SESSIONS_PER_NOTE = 200;
-// Bounds a single hook invocation (a Grep can match hundreds of files).
-export const ACCESS_MAX_PATHS_PER_CALL = 20;
-
-export function accessSidecarPath(repoRoot) {
-  return path.join(repoRoot, '.claude', '.access.json');
-}
-
-// 'notes/foo.md' | 'core/MEMORY.md' for a path inside the vault's retrievable
-// tiers, null for anything else. Keyed on the *target path*, never on cwd —
-// that is what makes a global-mode session in an unrelated project either
-// count a real vault read or nothing at all.
-export function vaultNoteKey(repoRoot, candidate) {
-  try {
-    if (!candidate || typeof candidate !== 'string') return null;
-    const abs = path.resolve(repoRoot, candidate);
-    const rel = path.relative(repoRoot, abs).replace(/\\/g, '/');
-    if (rel.startsWith('../') || path.isAbsolute(rel)) return null;
-    if (!rel.endsWith('.md')) return null;
-    // `archive/` counts too (ADR 0032). MEMORY.md's own claim is that the
-    // archive holds live evidence — every ADR to consult before an expensive
-    // decision lives there — and none of those reads were being measured, so
-    // the claim was untestable. `logs/` and the root files stay out: reading
-    // an always-loaded file measures the harness, not retrieval.
-    if (!/^(notes|core|archive)\//.test(rel)) return null;
-    return rel;
-  } catch {
-    return null;
-  }
-}
-
-export function readAccessSidecar(repoRoot) {
-  const empty = { version: ACCESS_SIDECAR_VERSION, since: null, notes: {} };
-  try {
-    const text = readFileSafe(accessSidecarPath(repoRoot));
-    if (text === null) return empty;
-    const data = JSON.parse(text);
-    if (!data || typeof data !== 'object' || typeof data.notes !== 'object' || data.notes === null) {
-      return empty;
-    }
-    return { version: ACCESS_SIDECAR_VERSION, since: data.since || null, notes: data.notes };
-  } catch {
-    // A truncated or hand-mangled buffer is not an error worth surfacing:
-    // start a fresh week rather than fail a tool call.
-    return empty;
-  }
-}
+// The reuse-telemetry sidecar and its weekly rollup stood here (ADR 0011,
+// 0024, 0032). Removed 2026-09-06 by the plan's own criterion: the Phase 5
+// benefit check answered its question with held-out tasks, not access counts,
+// so the telemetry informed no decision in the trial it was kept for. Q-14 —
+// the write-only-graveyard question it was built to answer — closed on
+// 2026-08-27 and has not been reopened. The `retrieval-rollup` ledger lines it
+// did write stay in `logs/signals/` as history.
 
 // tmp + rename: a crash mid-write leaves the previous file intact instead of
 // a half-JSON one every later read would discard. On Windows the rename can
-// still be refused while another process holds the target open — drop the
-// temp when that happens rather than leaving it behind. A stale
-// `.access.json.<pid>.tmp` sitting in `.claude/` was how that failure mode
-// stayed invisible for two days (ADR 0032).
+// still be refused while another process holds the target open — drop the temp
+// when that happens rather than leaving it behind. A stale
+// `.<pid>.tmp` sitting in `.claude/` was how that failure mode stayed
+// invisible for two days (ADR 0032). Its first caller was the access sidecar,
+// retired 2026-09-06; the maintenance sidecar still writes through it.
 function writeJsonAtomic(file, data) {
   const dir = path.dirname(file);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -1214,195 +697,127 @@ function writeJsonAtomic(file, data) {
   }
 }
 
-function writeAccessSidecar(repoRoot, data) {
-  writeJsonAtomic(accessSidecarPath(repoRoot), data);
-}
-
-// Counts one (note, session) pair. Repeat reads of the same note within the
-// same session are deliberately *not* counted: the metric is "how many
-// distinct pieces of work re-used this note", not "how chatty was the agent".
-// Returns the number of newly counted notes.
-export function recordNoteAccess(repoRoot, { files, sessionId, logTag }) {
-  try {
-    const sid = sessionId ? String(sessionId) : 'unknown';
-    const keys = [];
-    for (const f of files || []) {
-      const key = vaultNoteKey(repoRoot, f);
-      if (key && !keys.includes(key)) keys.push(key);
-      if (keys.length >= ACCESS_MAX_PATHS_PER_CALL) break;
-    }
-    if (keys.length === 0) return 0;
-
-    const data = readAccessSidecar(repoRoot);
-    if (!data.since) data.since = signalStamp(new Date());
-    let added = 0;
-    for (const key of keys) {
-      const entry = data.notes[key] || { count: 0, sessions: [], last: null };
-      if (!Array.isArray(entry.sessions)) entry.sessions = [];
-      if (entry.sessions.includes(sid)) continue; // dedup per (note, session)
-      entry.sessions.push(sid);
-      if (entry.sessions.length > ACCESS_MAX_SESSIONS_PER_NOTE) {
-        entry.sessions = entry.sessions.slice(-ACCESS_MAX_SESSIONS_PER_NOTE);
-      }
-      entry.count = Number(entry.count || 0) + 1;
-      entry.last = signalStamp(new Date());
-      data.notes[key] = entry;
-      added += 1;
-    }
-    if (added === 0) return 0;
-    writeAccessSidecar(repoRoot, data);
-    return added;
-  } catch (err) {
-    if (logTag) logLine(repoRoot, logTag, `access sidecar write failed: ${summarizeError(err)}`, 'WARN');
-    return 0;
-  }
-}
-
-// Empties the buffer after a rollup has been written to the ledger. The
-// `since` stamp of the new window is the moment the old one closed.
-export function resetAccessSidecar(repoRoot, logTag) {
-  try {
-    writeAccessSidecar(repoRoot, {
-      version: ACCESS_SIDECAR_VERSION,
-      since: signalStamp(new Date()),
-      notes: {},
-    });
-    return true;
-  } catch (err) {
-    if (logTag) logLine(repoRoot, logTag, `access sidecar reset failed: ${summarizeError(err)}`, 'WARN');
-    return false;
-  }
-}
-
-// --- Maintenance due check (ADR 0033) -----------------------------------
-// Scheduled maintenance was retired on 2026-08-30: the trigger is now the owner
-// opening a session. This is the replacement — one line at session start,
-// pull not push, silent unless something is actually due.
-//
-// One of the three items needs no stored state at all, and that is deliberate:
-// a stamp can only say when a pass last *ran*, while the unpushed commit count
-// says whether the work is *outstanding*. State beats schedule wherever the
-// state is observable. Only `/curator` is invisible from the tree, so only it
-// depends on being stamped.
-//
-// The fourth item was the `inbox/` backlog. It went with `inbox/` itself on
-// 2026-08-31 (ADR 0034): the folder had no producer, so the branch could only
-// ever report zero.
+// --- Session-start notices (ADR 0033, 0038) ------------------------------
+// Scheduled maintenance was retired on 2026-08-30: the trigger is the owner
+// opening a session. A "pass X is overdue" due line stood here until
+// 2026-09-06 and went with the passes that fed it — nothing is scheduled, so
+// nothing is late, and a reminder to run a pass is not a finding. What is left
+// is one shared daily notice budget and the one notice a session start still
+// volunteers: commits that never left this machine.
 //
 // Everything here is local: the pull that precedes it has already refreshed
 // the remote ref, so nothing in this path touches the network.
-const MAINTENANCE_SIDECAR_VERSION = 1;
+const MAINTENANCE_SIDECAR_VERSION = 2;
 const DAY_MS = 24 * 60 * 60 * 1000;
-export const MAINTENANCE_JOBS = ['curator', 'link-sweep', 'flywheel'];
-
-// Thresholds. Deliberately looser than the schedules they replace (both were
-// weekly): a reminder that fires the moment a week elapses is a reminder the owner
-// sees most sessions, and a line seen every session stops being read — the
-// lesson that killed B6.
-const DUE_DAYS = { 'link-sweep': 14, curator: 14 };
 const UNPUSHED_DUE_MS = 24 * 60 * 60 * 1000; // below this it is just live work
+
+// Hard cap from CLAUDE.md: three proactive items per local day, counted across
+// every surface. Before 2026-09-06 that was two independent once-a-day gates
+// (the due line, the budget warning) plus an ungated stream of check fires,
+// which is three surfaces each promising the same cap and none of them
+// counting the others.
+const NOTICE_DAILY_CAP = 3;
 
 export function maintenanceSidecarPath(repoRoot) {
   return path.join(repoRoot, '.claude', '.maintenance.json');
 }
 
+// v1 held `ran` stamps for the maintenance passes plus two "shown today"
+// flags. The stamps went with the due line they fed (2026-09-06): reminding
+// the owner that a pass is 14 days old is manufacturing maintenance work, which is
+// the thing this cleanup removes. An old v1 file is read for nothing but its
+// notice state and is rewritten in v2 shape on the next write.
 function readMaintenanceSidecar(repoRoot) {
   const empty = {
     version: MAINTENANCE_SIDECAR_VERSION,
-    ran: {},
-    shown: null,
-    budgetShown: null,
+    notices: { day: null, count: 0, keys: [] },
   };
   try {
     const text = readFileSafe(maintenanceSidecarPath(repoRoot));
     if (text === null) return empty;
     const data = JSON.parse(text);
-    if (!data || typeof data !== 'object' || !data.ran || typeof data.ran !== 'object') return empty;
-    // Fields are carried through explicitly, so anything omitted here is
-    // erased by the next stampMaintenance write.
+    if (!data || typeof data !== 'object') return empty;
+    const n = data.notices;
+    if (!n || typeof n !== 'object') return empty;
     return {
       version: MAINTENANCE_SIDECAR_VERSION,
-      ran: data.ran,
-      shown: data.shown || null,
-      budgetShown: data.budgetShown || null,
+      notices: {
+        day: n.day || null,
+        count: Number.isFinite(Number(n.count)) ? Number(n.count) : 0,
+        keys: Array.isArray(n.keys) ? n.keys.map(String) : [],
+      },
     };
   } catch {
-    // A truncated sidecar costs one over-eager reminder, never a session.
+    // A truncated sidecar costs one over-eager notice, never a session.
     return empty;
   }
 }
 
-// Called by a maintenance pass when it finishes. Losing this file means the
-// next session is reminded of something that was already done — the cheapest
-// possible failure, which is why it is machine state and not a ledger line.
-export function stampMaintenance(repoRoot, job, logTag) {
-  try {
-    if (!MAINTENANCE_JOBS.includes(job)) return { written: false, reason: 'unknown-job' };
-    const data = readMaintenanceSidecar(repoRoot);
-    data.ran[job] = signalStamp(new Date());
-    writeJsonAtomic(maintenanceSidecarPath(repoRoot), data);
-    return { written: true, at: data.ran[job] };
-  } catch (err) {
-    if (logTag) logLine(repoRoot, logTag, `maintenance stamp failed: ${summarizeError(err)}`, 'WARN');
-    return { written: false, reason: 'error' };
-  }
-}
-
-// The calendar day in local time — the unit every once-a-day notification gate
-// in this file counts in.
+// The calendar day in local time — the unit the notice budget counts in.
 function localDay(now) {
   return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-// The over-budget warning is raised from checkpointCommit, which runs on every
-// Stop — i.e. every turn. An over-budget file stays over budget until someone
-// consolidates it, so ungated that is the same line forty times in an evening,
-// and a line seen that often stops being read (the lesson that killed B6). The
-// CLAUDE.md cap is three proactive items a day across every surface; this is
-// the second of the two gates that keep it, the due line above being the first.
-export function budgetNoticeDue(repoRoot, { now = new Date(), record = true } = {}) {
+// The one gate every proactive hook message passes through.
+//
+// `candidates` are `{ key, text, priority }`; lower priority is more
+// important, and backup failures are priority 0 so that a day whose budget is
+// otherwise full still delivers "your commits never left this machine".
+// A key already shown today is dropped rather than re-counted, so a warning
+// that persists across forty Stops costs one item, not forty — and the count
+// lives in the sidecar, so opening a second session does not reset it.
+//
+// Everything refused is written to `logs/.automation.log`: suppressed is not
+// the same as unrecorded, and the diagnostics are where a requested inspection
+// looks.
+export function emitNotices(repoRoot, candidates, { now = new Date(), record = true, logTag } = {}) {
+  const list = (candidates || []).filter((c) => c && c.text);
+  if (list.length === 0) return [];
   try {
     const data = readMaintenanceSidecar(repoRoot);
     const today = localDay(now);
-    if (data.budgetShown === today) return false;
-    if (record) {
-      data.budgetShown = today;
+    if (data.notices.day !== today) {
+      data.notices = { day: today, count: 0, keys: [] };
+    }
+
+    const ordered = list
+      .map((c, idx) => ({ ...c, idx, priority: Number.isFinite(c.priority) ? c.priority : 5 }))
+      .sort((a, b) => a.priority - b.priority || a.idx - b.idx);
+
+    const allowed = [];
+    const suppressed = [];
+    for (const c of ordered) {
+      const key = String(c.key || c.text).slice(0, 200);
+      if (data.notices.keys.includes(key)) {
+        suppressed.push(`${key} (already shown today)`);
+        continue;
+      }
+      if (data.notices.count >= NOTICE_DAILY_CAP) {
+        suppressed.push(`${key} (daily cap of ${NOTICE_DAILY_CAP} reached)`);
+        continue;
+      }
+      data.notices.count += 1;
+      data.notices.keys.push(key);
+      allowed.push(c);
+    }
+
+    if (record && allowed.length > 0) {
       try {
         writeJsonAtomic(maintenanceSidecarPath(repoRoot), data);
       } catch {
-        // Failing to record costs a repeated warning, never a broken session.
+        // Failing to record costs a repeated notice, never a broken session.
       }
     }
-    return true;
-  } catch {
-    // Cannot tell — say it rather than swallow a real overflow.
-    return true;
-  }
-}
-
-function daysSince(iso, now) {
-  const t = Date.parse(iso || '');
-  if (!Number.isFinite(t)) return null;
-  return Math.floor((now.getTime() - t) / DAY_MS);
-}
-
-// link-sweep writes a dated report every run, so its last run is readable off
-// the tree whether or not anything stamped the sidecar. The newer of the two
-// wins; the report is what makes the very first due line honest instead of
-// claiming a sweep that has run twenty times has never run.
-function lastLinkSweep(repoRoot, stamped) {
-  let fromLog = null;
-  try {
-    for (const name of readdirSync(path.join(repoRoot, 'logs'))) {
-      const m = /^(\d{4}-\d{2}-\d{2})_link-sweep\.md$/.exec(name);
-      if (m && (fromLog === null || m[1] > fromLog)) fromLog = m[1];
+    for (const line of suppressed) {
+      if (logTag) logLine(repoRoot, logTag, `notice suppressed: ${line}`);
     }
+    // Back into the caller's original order, so a hook's own sequence reads
+    // the way it was written.
+    return allowed.sort((a, b) => a.idx - b.idx).map((c) => c.text);
   } catch {
-    // no logs/ dir — the stamp is then the only source
+    // Cannot tell — deliver rather than swallow, but never more than the cap.
+    return list.slice(0, NOTICE_DAILY_CAP).map((c) => c.text);
   }
-  const candidates = [stamped, fromLog ? `${fromLog}T12:00Z` : null].filter(Boolean);
-  if (candidates.length === 0) return null;
-  return candidates.sort().pop();
 }
 
 // The backup half of retired B1, minus the network call. B1 asked whether the
@@ -1410,65 +825,32 @@ function lastLinkSweep(repoRoot, stamped) {
 // that. What is left — and what actually breaks silently — is commits that
 // never left this machine.
 function unpushedBacklog(repoRoot, now) {
-  try {
-    const git = (args) =>
-      execFileSync('git', args, {
-        cwd: repoRoot,
-        timeout: 10000,
-        // stderr piped, not inherited: outside a repo git writes 'fatal: not a
-        // git repository' straight to the session's stderr otherwise.
-        stdio: ['ignore', 'pipe', 'pipe'],
-        encoding: 'utf8',
-        windowsHide: true,
-      }).trim();
-    const count = Number(git(['rev-list', '--count', '@{upstream}..HEAD']));
-    if (!Number.isFinite(count) || count === 0) return null;
-    const oldest = git(['log', '--reverse', '--format=%cI', '-1', '@{upstream}..HEAD']);
-    const ageMs = now.getTime() - Date.parse(oldest);
-    if (!Number.isFinite(ageMs) || ageMs < UNPUSHED_DUE_MS) return null;
-    return `${count} commit(s) unpushed for ${Math.floor(ageMs / DAY_MS)}d`;
-  } catch {
-    // No upstream, no git, detached HEAD — all mean "cannot tell", not "due".
-    return null;
-  }
+  const backlog = unpushedCommits(repoRoot);
+  // "Cannot tell" is not "in sync". No upstream, a broken git, a detached
+  // HEAD — each means the vault's backup state is unverified, and silence
+  // there is exactly how a machine-only vault would go unnoticed.
+  if (!backlog.ok) return 'backup state unverified (no upstream or git error)';
+  if (backlog.count === 0) return null;
+
+  const oldest = oldestUnpushedISO(repoRoot);
+  const oldestMs = oldest ? Date.parse(oldest) : NaN;
+  if (!Number.isFinite(oldestMs)) return `${backlog.count} commit(s) unpushed, age unknown`;
+
+  const ageMs = now.getTime() - oldestMs;
+  if (ageMs < UNPUSHED_DUE_MS) return null; // below a day it is just live work
+  return `${backlog.count} commit(s) unpushed for ${Math.floor(ageMs / DAY_MS)}d`;
 }
 
-// Returns the one due line, or null when nothing is due. Also null when a due
-// line was already shown today: the notification budget in CLAUDE.md is three
-// items per day across every surface, and this hook fires in every project on
-// the machine, not just in the vault.
-export function maintenanceDueLine(repoRoot, { now = new Date(), record = true } = {}) {
+// The only thing left that a session start volunteers: whether the vault's
+// work is actually backed up. The maintenance due line that used to live here
+// — "curator 14d ago", "audit never run" — was removed on 2026-09-06 with the
+// passes that fed it. It reported staleness against a schedule nothing runs,
+// and a reminder to run a pass is not a finding.
+export function backupNotice(repoRoot, { now = new Date() } = {}) {
   try {
-    const data = readMaintenanceSidecar(repoRoot);
-    const today = localDay(now);
-    if (data.shown === today) return null;
-
-    const parts = [];
-
-    const sweepAt = lastLinkSweep(repoRoot, data.ran['link-sweep']);
-    const sweepDays = daysSince(sweepAt, now);
-    if (sweepDays !== null && sweepDays >= DUE_DAYS['link-sweep']) {
-      parts.push(`link sweep ${sweepDays}d ago`);
-    }
-
-    const curatorDays = daysSince(data.ran.curator, now);
-    if (curatorDays === null) parts.push('curator never run');
-    else if (curatorDays >= DUE_DAYS.curator) parts.push(`curator ${curatorDays}d ago`);
-
-    const unpushed = unpushedBacklog(repoRoot, now);
-    if (unpushed) parts.push(unpushed);
-
-    if (parts.length === 0) return null;
-
-    if (record) {
-      data.shown = today;
-      try {
-        writeJsonAtomic(maintenanceSidecarPath(repoRoot), data);
-      } catch {
-        // Failing to record costs a repeated line, never a broken session.
-      }
-    }
-    return `Maintenance due: ${parts.join(' · ')}`;
+    const line = unpushedBacklog(repoRoot, now);
+    if (!line) return null;
+    return { key: 'backup', priority: 0, text: `Backup: ${line}` };
   } catch {
     return null;
   }

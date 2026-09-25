@@ -1,30 +1,33 @@
 ---
 type: playbook
 created: 2026-09-02
-tags: [lifecycle, curation, self-evolution, memory]
+tags: [lifecycle, curation, memory]
 status: active
 aliases: [corroboration gate, archiving rules, contradictions, pinning, staleness]
-description: The full lifecycle & self-evolution policy with rationale — tiers, distillation, maturity, staleness, contradiction handling, and the maintenance loop. Binding rules live in CLAUDE.md.
-related: ["[[MEMORY]]"]
+description: What happens to a note or a fact, with rationale — tiers, distillation, maturity, staleness, archive-vs-delete, consolidation and anti-poisoning. How the system changes itself is self-evolution-policy; binding rules live in CLAUDE.md.
+related: ["[[MEMORY]]", "[[self-evolution-policy]]"]
 ---
 
-# Lifecycle & Self-Evolution Policy
+# Lifecycle Policy
 
-The binding rules live in `CLAUDE.md` (§ Lifecycle & self-evolution); this
-playbook holds the reasoning and is the single home for *why*. Synthesized from
-PKM literature (Ahrens, Matuschak, zettelkasten.de, Forte/PARA, Appleton) and
-agent-memory research (MemGPT/Letta, mem0, Generative Agents, A-MEM, CoALA,
-Anthropic), then corrected against a year of one instance actually running it.
+Binding rules live in `CLAUDE.md`; this playbook holds the *why*. **Scope: what
+happens to a note or a fact.** How the *system* changes itself — the
+maintenance loop, growth control, the noise budget — is
+[[self-evolution-policy]]; the machine they run on is `docs/ARCHITECTURE.md`.
+None of the three restates a rule from another. Synthesized from PKM literature
+(Ahrens, Matuschak, Forte/PARA, Appleton) and agent-memory research
+(MemGPT/Letta, mem0, A-MEM, CoALA), then corrected against the reference
+instance actually running it.
 
 ## 1. Memory tiers
 
-- **Tier 0 — always loaded**: `IDENTITY.md`, `USER.md`, `MEMORY.md`. Budgets:
-  `USER.md` 2000 characters, `MEMORY.md` 4000 (`IDENTITY.md` stays a 40-line
-  convention, unmetered — it is protected). `MEMORY.md` holds pointers, never
-  detail. Rationale: an index past ~4k characters loses attention, and past
-  ~10KB of session-start payload the harness stops inlining Tier 0 at all — the
-  budget protects loading itself, not just attention. The unit is characters,
-  not lines, because a line cap silently varies 2× with how long your lines are.
+- **Tier 0 — always loaded**: `IDENTITY.md` + `USER.md` + `MEMORY.md` in the
+  vault, `USER.md` + `MEMORY.md` in any other project (the rest is
+  vault-internal). Budgets (ADR 0030): `USER.md` 2000 characters, `MEMORY.md`
+  4000; `IDENTITY.md` is a 40-line convention. Pointers, never detail. The
+  budget protects loading itself — past roughly 10KB of payload the harness is
+  *believed* to stop inlining Tier 0, a hypothesis the hook logs its measured
+  size against on every run rather than assuming.
 - **Tier 1 — on demand**: `notes/` (`memory | playbook | project | knowledge`),
   reached by pointer and search, never preloaded.
 - **Tier 2 — episodic**: `logs/`, append-only, distilled upward then archived.
@@ -38,126 +41,95 @@ Anthropic), then corrected against a year of one instance actually running it.
 | Procedural (how we work) | `notes/` (`playbook`), skills | deliberate revision only | replace whole sections, never casual append |
 
 - Logs older than 30 days: distill durable facts into notes, then move the
-  original to `archive/` — flat, no subfolder. Curator step.
+  original to `archive/` — flat, no subfolder (ADR 0028). Curator step.
 - Playbooks are capped at ~150 lines each; if one outgrows that, split it.
+- A long research report that crowds out retrieval may be kept twice: a
+  byte-identical, date-prefixed snapshot in `archive/` and a short live note of
+  the same name in `notes/` that holds the conclusion and points at the
+  snapshot (ADR 0043). A selective pressure valve, not a rule that every long
+  note is split — plans, playbooks and references whose detail *is* the
+  retrieval target stay whole.
 
 ## 3. Distillation
 
-There is no capture queue, on purpose. The one path into the memory store is
-**live distillation inside a session**: something is said, the note is written
-then and there, nothing is queued for a later pass that never comes. One rule
-is load-bearing:
+There is no capture queue, on purpose. Two paths lead into the memory store and
+both end in distillation: **live distillation inside a session** — something is
+said, the note is written then and there — and **`/ingest` of a source** the
+owner saved into `raw/` (ADR 0035). Nothing is queued for a later pass that
+never comes. One rule is load-bearing:
 
 - **Nothing enters `notes/` verbatim.** A thought is rewritten in original
   wording, merged into an existing note, or linked into the graph. Unprocessed
-  clips are the collector's-fallacy failure mode, whether they arrive through a
-  queue or straight from a conversation.
+  clips are the collector's fallacy, however they arrive.
 
 ## 4. Knowledge-note maturity
 
-- `status` ladder: `seedling → growing → evergreen`, promoted **only through
-  reuse** — touched, extended, or linked from new work. Never on a timer: a
-  calendar cannot tell whether thinking matured.
+- `status` ladder: `seedling → growing → evergreen`, promoted **only when a
+  human or a pass actually rewrites the note** — never on a timer, and never
+  from an access count. Being read is not maturing, and nothing here counts
+  reads any more (ADR 0039).
 - Every new note gets **≥1 outbound wikilink before it is closed** — the
-  highest-leverage rule against orphan graveyards.
-- Atomicity gate for `evergreen`: one idea, cleanly nameable, understandable by
-  a future session with zero context, nothing removable. Split a note that
-  fails it; keep it composite while the idea is immature.
-- Orphans are structural waste, but the audit only **reports** them and
-  `/curator` proposes what to do. Never manufacture a link to clear the count —
-  a forced link is the documented PKM anti-pattern.
+  highest-leverage rule against orphan graveyards. **One exception, at capture
+  time only:** a `notes/lesson-*.md` links only when an obviously-related note
+  already exists (`/lesson` step 5). Choosing what a fresh mistake relates to
+  is interpretation, and ADR 0019 keeps interpretation out of capture; the link
+  arrives with corroboration or not at all.
+- Atomicity gate for `evergreen`: one idea, cleanly nameable, understandable
+  with zero context, nothing removable. Split a note that fails it.
+- Orphans are structural waste, but the audit only **reports** them. Never
+  manufacture a link to clear the count — a forced link is the documented PKM
+  anti-pattern.
 
 ## 5. Staleness — domain-dependent, not universal
 
-- Fast-decaying content (tools, versions, APIs, prices, news): `review_by:
-  <created + 12 months>` at creation.
-- Stable content (concepts, principles, reflection): no automatic trigger —
-  decay by usage, not by date.
-- Feedback and correction memories are re-challenged after **90 days**:
-  corrections that stack without expiry end up contradicting each other.
-- An overdue `review_by` never auto-deletes; it flags the note for the next
-  curator pass.
+- **Verify before relying, whatever the date.** A claim about a tool, version,
+  API, price or product behaviour is checked against its source at the moment
+  something depends on it. Twelve months was never a freshness guarantee — an
+  API can move in a week — and a `review_by` a year out mostly reassures.
+- `review_by:` stays optional, for decay that is genuinely predictable.
+  Nothing schedules a review: an overdue date is something a reader notices.
+- Stable content (concepts, principles, reflection): no trigger at all.
+- Correction memories are re-challenged after ~90 days; corrections that stack
+  without expiry end up contradicting each other.
 
 ## 6. Archive vs delete
 
-- **Archive is the default.** `archive/` stays searchable but out of active
-  views; git keeps the record either way.
+- **Archive is the default** — searchable, out of active views; git keeps the
+  record either way.
 - Deletion is allowed in exactly two cases: exact duplicates within one file,
   and a note that is simultaneously unlinked, fully superseded, and not
   load-bearing anywhere — proposed by the curator, executed only after the
   owner approves.
-- Rationale: "never delete" produces unbounded noise, unrestricted deletion
-  loses load-bearing context; the conditions plus approval are the middle.
+- Rationale: "never delete" is unbounded noise, free deletion loses
+  load-bearing context; the conditions plus approval are the middle.
 
 ## 7. Consolidation contract (curator)
 
-- **Runs when the owner starts it**, never on every write and never on a clock.
+- **Runs when the owner starts it** (ADR 0033), never on every write and never
+  on a clock.
 - Per candidate fact, exactly one decision: **ADD / MERGE / SUPERSEDE / NOOP**,
   never blind append. Before ADD, search for near-duplicates.
 - On contradiction **newer evidence wins and the override is logged** in the
   surviving note or session log — supersession is visible, never silent.
 - Safe operations (merge duplicates, fix pointers, distill logs) are applied
-  directly; destructive or structural ones (deletions, folder changes,
-  budget-forced truncations of meaning) are **proposed as a table**. Evolution
-  is decoupled from execution.
+  directly; destructive or structural ones are reported in the conversation and
+  left to the owner. No queue is opened for them (ADR 0038).
 
 ## 8. Anti-poisoning guardrails
 
 - Provenance: facts from untrusted external content carry `source:` forever,
   through every merge and move, and never enter `USER.md` or `IDENTITY.md`.
-- Corroboration gate: a fact seen only once enters `notes/` (`type: memory`) at
-  `confidence: low`, and is promoted into `MEMORY.md` only after a second
-  **independent** session confirms or uses it. Durable status requires more than
-  one observation; poisoning requires only one write.
+  A merge preserves each fact's source, date, scope and uncertainty; a newer
+  line does not outrank an older one merely for being newer.
+- Corroboration gate: a fact seen once enters `notes/` (`type: memory`) at
+  `confidence: low` and reaches `MEMORY.md` only on a **second independent
+  source** — independence being a property of the source, not a count of
+  sessions. Re-reading one summary is one observation seen twice (ADR 0038).
 - Protected files: `IDENTITY.md` and `CLAUDE.md` are never edited by an
-  automated pass — agents propose a diff, only the owner applies it.
-- Pinning: `pinned: true` exempts a fact from demotion. Max 10 vault-wide,
-  re-justified quarterly; a cap-free pin is growth wearing a safety label.
-
-## 9. The self-evolution loop
-
-The trigger is the owner opening a session, never a clock. Unattended
-scheduling was tried in the reference instance and retired: a job that runs
-without someone watching produces work nobody reads.
-
-| Cadence | Ritual | Mode |
-|---|---|---|
-| Every session | Session log + `MEMORY.md` update (standing rule) | applies |
-| When the session-start due line says so | `/curator`, `/flywheel`, `link-sweep.mjs` — by hand, with someone watching | applies safe, proposes destructive |
-| Monthly | `/audit` — budgets, orphans, overdue `review_by`, unread notes, tag sprawl, contradiction stacking | **report only, never fixes** |
-| Quarterly | Re-justify pins; review this policy against observed failures | proposes changes as decisions |
-
-The audit is deliberately separate from consolidation: memory systems degrade
-silently, and a pass that only reports cannot cause the drift it exists to
-catch. This policy evolves through the gate it defines — a proposed diff plus a
-`decision`-tagged log entry, applied deliberately.
-
-## 10. Growth control
-
-- No new folder, tag, or taxonomy tier speculatively — only after an actual
-  retrieval failure. Over-organization is procrastination with extra steps.
-- Tags are descriptive, applied after the fact, never a schema decided ahead.
-- **The same gate applies to machinery**: a new hook, script or job needs an
-  encountered failure, exactly as a folder does. The reference instance left
-  this unwritten for nine days and accumulated ~5,400 lines of hooks and
-  scripts around 17 notes. Machinery is harder to remove than a folder — it
-  acquires callers.
-- Health is **retrieval, not volume** — "notes re-used this month", never
-  "notes captured". Nothing retrieved in a month is a write-only graveyard, and
-  that gets fixed before anything is added.
-
-## 11. Anti-noise economics
-
-A review queue dies from noise long before it dies from difficulty, so these
-protect the owner's attention as policy, not preference.
-
-- **3 proactive items per day, hard cap, across every surface together** —
-  session start, briefs, alerts, proposals. Everything past it is a pull
-  artifact. False positives kill a queue permanently.
-- **Acceptance logging is the master metric**, through `PROPOSALS.md` and the
-  signal ledger; a suggestion feature that is not accepted gets **killed, not
-  tuned forever**.
-- **Every automated job carries a kill criterion** written down beside its
-  purpose. A job with no defined way to fail is one nobody turns off.
-- **Review cost is the design constraint.** Answering a proposal is a checkbox.
-  If rows sit longer than a week, the cadence or scope is wrong — not the owner.
+  automated pass — agents propose a diff, the owner applies it. **A
+  convention, not a security boundary**: the clients carry no path deny-rule
+  for either, and a shell command writes any file whatever the Write/Edit
+  permissions say. It holds because the agent follows `CLAUDE.md`.
+- Pinning: `pinned: true` exempts a fact from demotion, capped at 10
+  vault-wide. The quarterly re-justification went with the calendar (ADR
+  0033); the cap stays in case pins start being used.

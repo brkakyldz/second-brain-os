@@ -15,10 +15,8 @@ import {
   exitBrainLock,
   isVaultActive,
   logLine as libLogLine,
-  spawnFlush,
-  pendingFlushSessions,
-  maintenanceDueLine,
-  FLUSH_MIN_TURNS,
+  backupNotice,
+  emitNotices,
 } from './lib.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -116,7 +114,7 @@ function getGitDir(repoRoot) {
   }
 }
 
-// Runs `git pull --rebase --autostash` under the shared brain lock. Never
+// Runs `git pull --rebase` on a clean tree under the shared brain lock. Never
 // throws. Returns { ok, skipped, warning }. On failure, checks for a
 // stuck/conflicted rebase and aborts it so the tree is never left mid-rebase.
 //
@@ -136,9 +134,33 @@ function runGitPull(repoRoot) {
   }
 }
 
-function pullUnderLock(repoRoot) {
+// Tracked, uncommitted changes belong to a live task — possibly in the other
+// runtime (ADR 0044). `--autostash` used to lift them off the disk for the
+// pull and put them back; when the put-back failed they were stranded in a
+// stash while their owner kept working (2026-09-22). So a dirty tree skips the
+// pull outright: a stale session start is cheap, another task's files are not.
+function trackedChanges(repoRoot) {
   try {
-    execFileSync('git', ['pull', '--rebase', '--autostash'], {
+    return execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], {
+      cwd: repoRoot,
+      timeout: 10000,
+      encoding: 'utf8',
+      windowsHide: true,
+    }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+function pullUnderLock(repoRoot) {
+  const dirty = trackedChanges(repoRoot);
+  if (dirty) {
+    const count = dirty === 'unknown' ? '?' : dirty.split(/\r?\n/).length;
+    logLine(repoRoot, `pull skipped: ${count} tracked path(s) uncommitted — a live task owns them`);
+    return { ok: false, skipped: true, warning: null };
+  }
+  try {
+    execFileSync('git', ['pull', '--rebase'], {
       cwd: repoRoot,
       timeout: 25000,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -194,8 +216,22 @@ function readFileSafe(p) {
   }
 }
 
+// The HTML comments at the head of MEMORY.md and USER.md are instructions to
+// whoever *writes* those files — budgets, what does not belong there, which
+// ADR decided it. They are not facts about the owner or the world, the budget
+// counter already excludes them (`countBudgetChars`), and injecting them spent
+// ~600 bytes of a payload measured against a threshold that turns Tier 0 off.
+// Stripped here so what is counted and what is delivered are the same text.
+function stripWriterComments(text) {
+  return text.replace(/<!--[\s\S]*?-->/g, "");
+}
+
 function normalizeForCompare(p) {
   return path.resolve(p).replace(/[\\/]+$/, '').toLowerCase();
+}
+
+function section(text, { label = 'section', optional = false } = {}) {
+  return { text, label, optional };
 }
 
 function buildContext(repoRoot, pullResult, projectDir) {
@@ -211,21 +247,29 @@ function buildContext(repoRoot, pullResult, projectDir) {
   if (!pullResult.ok && !pullResult.skipped) {
     header += `\n⚠ git pull failed (${pullResult.warning}) — working from local state`;
   }
-  sections.push(header);
+  // Sections carry a label and whether they may be dropped when the payload
+  // is over the limit. Core content (Tier-0 files, the standing rules a
+  // global-mode session needs) is never optional.
+  sections.push(section(header, { label: 'header' }));
 
   if (isOutsideVault) {
     sections.push(
+      section(
       [
         '### Global brain mode — standing rules',
         `You are working outside the brain vault. The brain lives at ${repoRoot}.`,
         'When substantial learnings, decisions, or durable facts emerge in this session,',
         `append a session-log entry to ${path.join(repoRoot, 'logs', 'YYYY-MM-DD_HHMM.md')}`,
         '(taxonomy: decision|bugfix|feature|discovery|preference|change, and name the',
-        `project it came from) and update ${path.join(repoRoot, 'core', 'MEMORY.md')} if a durable`,
+        'project it came from). Do not write a log for ordinary conversation, questions,',
+        'brainstorming, status checks or planning-only work.',
+        `Update ${path.join(repoRoot, 'core', 'MEMORY.md')} if a durable`,
         'fact emerged (one line, 4000-char budget, pointer style). Never write brain content',
         "into the current project's repo, and never commit the current project's files",
-        'into the brain.',
-      ].join('\n')
+        'into the brain. Brain commits are task-owned: stage only the brain files you wrote.',
+      ].join('\n'),
+      { label: 'global-brain-rules' }
+      )
     );
   }
 
@@ -256,39 +300,85 @@ function buildContext(repoRoot, pullResult, projectDir) {
       ? ` — ${b.count}/${b.limit} chars (${b.pct}%)` +
         (over ? ' ⚠ OVER BUDGET, consolidate before adding' : '')
       : '';
-    sections.push(`### ${name}${meter}\n${content.trimEnd()}`);
+    sections.push(section(`### ${name}${meter}\n${stripWriterComments(content).trim()}`));
   }
 
   if (!isOutsideVault) {
     sections.push(
-      `### OPEN_QUESTIONS.md\nNot inlined — read ${path.join(repoRoot, 'core', 'OPEN_QUESTIONS.md')} before planning vault work.`
+      section(
+        `### OPEN_QUESTIONS.md\nNot inlined — read ${path.join(repoRoot, 'core', 'OPEN_QUESTIONS.md')} before planning vault work.`,
+        { label: 'open-questions-pointer' }
+      )
     );
   }
 
-  // The replacement for the retired scheduled jobs (ADR 0033). One line, at
-  // most once a day, and nothing at all when nothing is due — a line that
-  // always appears stops being read. Shown in every project, not only the
-  // vault: unattended maintenance is gone, so the only moment left to notice
-  // is whichever session the owner happens to open.
-  const due = maintenanceDueLine(repoRoot);
-  if (due) {
-    sections.push(
-      `### Maintenance
-${due}
-Run the matching pass when convenient — nothing is scheduled any more.`
-    );
-    logLine(repoRoot, `maintenance due line shown: ${due}`);
+  // The only thing a session start volunteers now: whether the vault's work
+  // is actually backed up. The maintenance due line that stood here — curator
+  // 14d ago, audit never run — was removed on 2026-09-06 along with the passes
+  // that fed it: it measured staleness against a schedule nothing runs, and a
+  // reminder to run a pass is not a finding. Backup failures are priority 0 in
+  // the shared daily notice budget, because they are the one thing no later
+  // session can recover.
+  const backup = emitNotices(repoRoot, [backupNotice(repoRoot)], { logTag: 'SessionStart' });
+  for (const line of backup) {
+    sections.push(section(`### Backup\n${line}`, { label: 'backup-notice', optional: true }));
+    logLine(repoRoot, `backup notice shown: ${line}`);
   }
 
-  const payload = sections.join('\n\n');
-  if (Buffer.byteLength(payload, 'utf8') > 9500) {
+  return fitPayload(repoRoot, sections);
+}
+
+// Above roughly 10KB the harness is believed to persist hook output to a side
+// file and inject only a preview, which would silently un-load Tier 0. That
+// number is a **hypothesis** from the 2026-09-06 audit, not a documented
+// product guarantee — so this measures the whole serialized hook output, JSON
+// envelope included, logs the figure on every run so the real threshold can be
+// observed rather than assumed, and never truncates anything silently.
+//
+// Over the limit, optional sections are dropped whole, newest first: a backup
+// notice or a status banner loses its space before a Tier-0 file does. If only
+// core content is left it is delivered oversized and loudly logged — half a
+// MEMORY.md is worse than a payload the harness may or may not shorten.
+const PAYLOAD_SOFT_LIMIT_BYTES = 9500;
+
+function serializedSize(payload) {
+  const envelope = {
+    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: payload },
+  };
+  return Buffer.byteLength(JSON.stringify(envelope), 'utf8');
+}
+
+function fitPayload(repoRoot, sections) {
+  const kept = [...sections];
+  const join = () => kept.map((x) => x.text).join(String.fromCharCode(10, 10));
+  let size = serializedSize(join());
+  const dropped = [];
+
+  while (size > PAYLOAD_SOFT_LIMIT_BYTES && kept.some((x) => x.optional)) {
+    let idx = -1;
+    for (let i = kept.length - 1; i >= 0; i--) {
+      if (kept[i].optional) {
+        idx = i;
+        break;
+      }
+    }
+    dropped.push(kept[idx].label);
+    kept.splice(idx, 1);
+    size = serializedSize(join());
+  }
+
+  logLine(repoRoot, `context payload ${size}B serialized (soft limit ${PAYLOAD_SOFT_LIMIT_BYTES}B, a hypothesis)`);
+  if (dropped.length > 0) {
+    logLine(repoRoot, `payload over the limit — dropped optional section(s): ${dropped.join(', ')}`, 'warn');
+  }
+  if (size > PAYLOAD_SOFT_LIMIT_BYTES) {
     logLine(
       repoRoot,
-      `context payload ${Buffer.byteLength(payload, 'utf8')}B nears the ~10KB persisted-output threshold — trim core/ before Tier 0 stops loading`,
+      `context payload ${size}B is over the limit with only core content left — consolidate core/ rather than leaving it to the harness to decide what arrives`,
       'warn'
     );
   }
-  return payload;
+  return join();
 }
 
 function emit(additionalContext) {
@@ -301,40 +391,12 @@ function emit(additionalContext) {
   process.stdout.write(JSON.stringify(output));
 }
 
-// Catch-up for the flush mechanism. The SessionEnd spawn is the fast path but
-// not a guaranteed one — it fires while the process is being torn down, so a
-// child that has not got going yet can die with its parent. Here there is no
-// such race, and a session that slipped through is at most one session late.
-//
-// Bounded to two calls: the point is that nothing is lost, not that a backlog
-// is cleared in one morning, and each call costs a Haiku summarization.
-const SWEEP_MAX = 2;
-const SWEEP_MIN_TURNS = FLUSH_MIN_TURNS;
-const SWEEP_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
-
-function sweepPendingFlushes(repoRoot, currentSid) {
-  try {
-    const now = Date.now();
-    const due = pendingFlushSessions(repoRoot, { excludeSid: currentSid })
-      .filter((s) => s.turns >= SWEEP_MIN_TURNS && now - s.startedAt.getTime() <= SWEEP_MAX_AGE_MS)
-      .slice(0, SWEEP_MAX);
-    for (const s of due) {
-      spawnFlush(repoRoot, { sessionId: s.sid, logTag: 'SessionStart' });
-    }
-  } catch (err) {
-    // A sweep that fails must never cost the user their session start.
-    libLogLine(repoRoot, 'SessionStart', `flush sweep failed: ${err && err.message}`, 'WARN');
-  }
-}
-
+// The flush sweep that used to live here was removed with the flush mechanism
+// itself (simplification plan, Phase 2). SessionStart now pulls, injects
+// Tier 0, and stops — nothing is spawned, and stdin is read only to satisfy
+// the hook protocol.
 async function main() {
-  const raw = await readStdin();
-  let currentSid = null;
-  try {
-    currentSid = (JSON.parse(raw || '{}') || {}).session_id || null;
-  } catch {
-    // no session id — the sweep just cannot exclude the current session
-  }
+  await readStdin();
   const repoRoot = getRepoRoot();
   const projectDir = getProjectDir();
   logLine(repoRoot, 'run started');
@@ -348,7 +410,6 @@ async function main() {
   const context = buildContext(repoRoot, pullResult, projectDir);
 
   emit(context);
-  sweepPendingFlushes(repoRoot, currentSid);
   process.exit(0);
 }
 
