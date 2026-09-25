@@ -19,7 +19,8 @@
 //   5. Notes missing from INDEX.md — a git-blind twin of the index-coverage
 //      check (ADR 0038).
 //
-// Writes a report to logs/YYYY-MM-DD_link-sweep.md.
+// Writes a report to logs/YYYY-MM-DD_link-sweep.md and a one-line summary to
+// stdout. `--help` prints the usage and writes nothing.
 //
 // Kill criterion: orphan count flat for a month (scripts/README.md).
 
@@ -27,8 +28,30 @@ import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const USAGE = `Usage: node scripts/link-sweep.mjs [--help]
+
+Scans the vault for broken [[wikilinks]], orphan notes, dangling MEMORY.md
+pointers, duplicate basenames and notes missing from INDEX.md. Writes the
+report to logs/YYYY-MM-DD_link-sweep.md (re-running the same day overwrites
+it) and prints a one-line summary. The vault is BRAIN_DIR if set, else the
+folder above this script. Takes no other arguments.
+`;
+{
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    process.stdout.write(USAGE);
+    process.exit(0);
+  }
+  if (args.length) {
+    process.stderr.write(`Unknown argument: ${args.join(' ')}\n\n${USAGE}`);
+    process.exit(2);
+  }
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..');
+// Same precedence as every other script: BRAIN_DIR env → the script's own
+// location (scripts/ sits directly under the vault root).
+const REPO_ROOT = process.env.BRAIN_DIR?.trim() || path.resolve(__dirname, '..');
 
 // Directories not walked at all — not link sources, not link targets.
 const EXCLUDE_FROM_SCAN = new Set([

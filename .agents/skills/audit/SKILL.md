@@ -45,16 +45,21 @@ the pointer claims); facts that appear in two places with different dates or
 wording; a `MEMORY.md` line whose detail note has since moved on; an ADR
 whose `status:` no longer matches what later ADRs did to it.
 
-Report the rules the compiled checks encode (`note-conventions`,
-`wikilink-short-form`) like any other: since v1.1 nothing runs those checks
-automatically, so the audit is where a violation surfaces.
+Run the compiled checks over the whole vault, read-only:
+`node .claude/hooks/checks.mjs --all` (never `--record` here — that writes
+the ledger). Since v1.1 nothing runs them on its own, so the audit is where a
+violation surfaces; report each finding like any other. Run
+`node scripts/vault-metrics.mjs` too (stdout only) and carry its check-fire,
+correction-recurrence and retrieval-failure counts into the numbers table.
 
 ## How
 
-Mechanical counts come from read-only shell one-liners inside the run — no new
-script file; the growth-control gate applies to machinery too (ADR 0032). Do
-not run a report-writing helper such as `link-sweep.mjs` during the audit; read
-its latest report or reproduce the count without writes.
+Mechanical counts come from read-only shell one-liners and the read-only
+scripts named above (`checks.mjs` without `--record`, `vault-metrics.mjs`,
+`retrieval-eval.mjs`) — no new script file; the growth-control gate applies to
+machinery too (ADR 0032). Do not run a report-writing helper such as
+`link-sweep.mjs` during the audit; read its latest report or reproduce the
+count without writes.
 
 Read `core/`, `INDEX.md`, the previous audit, all live note frontmatter and the
 full text needed for semantic claims, every decision note (`type: decision`,

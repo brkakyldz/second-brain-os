@@ -28,8 +28,11 @@ retired.
   basenames (which make `[[name]]` ambiguous and fail silently), and notes in
   `notes/` with no row in `INDEX.md`.
 - **When:** by hand, or from a `/curator` session — `node scripts/link-sweep.mjs`.
-- **Output:** a report at `logs/YYYY-MM-DD_link-sweep.md`. It writes that one
-  file and nothing else; commit it or delete it like any other log.
+  It sweeps `BRAIN_DIR` when that is set, else the folder above the script;
+  `--help` prints the usage and writes nothing.
+- **Output:** a report at `logs/YYYY-MM-DD_link-sweep.md` (a second run the
+  same day overwrites it). It writes that one file and nothing else; commit it
+  or delete it like any other log.
 - **Kill criterion:** orphan count flat for a month — simplify or drop it.
 
 ## B4 — gitleaks pre-commit hook · **opt-in**
@@ -73,6 +76,10 @@ survives as a convention for the skills and feeds nothing that scores them.
   `node scripts/retrieval-eval.mjs [--verbose]`.
 - **Output:** Markdown on stdout. Exits 0 always — a failing row is a finding,
   not a broken build.
+- **Language:** folding and stopwords are built for English and Turkish — a
+  Turkish-locale lowercase with a dotless-i fold, then an accent strip, and a
+  short stopword list in both. Another query language with its own case rules
+  adapts `normalizeText` and `STOPWORDS` in the script.
 - **What it does not measure:** whether a session answered anything correctly.
   Recall also drifts down as the corpus grows, because more notes match the
   same terms — competition, not rot.
@@ -112,7 +119,7 @@ survives as a convention for the skills and feeds nothing that scores them.
   skills folder that exists — the vault's and each project's
   `.agents/skills`, `~/.agents/skills`, and the user-level folders of both
   runtimes (`CLAUDE_CONFIG_DIR` / `CODEX_HOME` respected).
-- **When:** at the start of a project session that resumes old work, or before
+- **When:** at the start of a project session that resumes old work, or from
   `/curator`: `node scripts/project-doctor.mjs`. `--repo <path>` adds a
   repo with no card yet; `--kit <dir>` (or `BRAIN_KIT_DIR`) adds a separate
   skills kit to the drift scan, if you keep one; `--since YYYY-MM-DD` moves
@@ -138,13 +145,32 @@ survives as a convention for the skills and feeds nothing that scores them.
   Named `flywheel-metrics.mjs` until the reference instance retired the
   sections that scored suggestions and note re-use (ADR 0038, 0039).
 - **When:** from `/audit`, or ad hoc: `node scripts/vault-metrics.mjs`.
+- **Check fires** accrue only through `checks.mjs --record` (below): nothing
+  runs the checks on its own since v1.1, so a zero means nothing was recorded.
 - **Kill criterion:** if an audit stops reading it, drop it.
+
+## `.claude/hooks/checks.mjs` — the compiled checks, by hand
+
+- **What:** the rules that are checked as code — wikilink short form, note
+  frontmatter, `INDEX.md` coverage (ADR 0019, 0022, 0035). It lives beside the
+  hook because the Stop checkpoint ran it until v1.1; now nothing does.
+- **When:** before a commit — `node .claude/hooks/checks.mjs` for the working
+  tree's changes, `--staged` for what is staged, `--all` for the whole vault.
+  `/audit` runs `--all`. Wiring `--staged` into a git pre-commit hook turns
+  the warning into a gate; the template leaves that choice to you.
+- **Output:** every finding on stdout; exit 0 clean, 1 on a finding, 2 on bad
+  arguments. Read-only unless `--record`, which appends new fires to
+  `logs/signals/YYYY-MM.md`, once per check, file and finding per month.
+- **Kill criterion:** per check — one that false-positives twice goes back to
+  prose (ADR 0019).
 
 ## `tests/index-coverage.test.mjs`
 
 Regression test for the two INDEX-coverage instruments — the `index-coverage`
 check in `.claude/hooks/checks.mjs` and the git-blind sweep in
-`link-sweep.mjs` — against a throwaway repo in the system temp directory:
+`link-sweep.mjs` — and for their command lines (`checks.mjs` exit codes,
+`--staged`, `--all`, `--record`; link-sweep's `BRAIN_DIR` and `--help`),
+against a throwaway repo in the system temp directory:
 `node scripts/tests/index-coverage.test.mjs`. Exits 1 on a failure.
 
 ## `tests/project-doctor.test.mjs`
@@ -163,4 +189,4 @@ Exits 1 on a failure.
 | Reuse telemetry (`reuse-telemetry.mjs`, `--rollup`) | v1.1 | Counted that a note was opened, never that opening it helped; informed no decision (ADR 0039) |
 | Proposals sweep (`proposals.mjs`), `/flywheel`, the acceptance rate | v1.1 | The queue aged instead of being answered (ADR 0038) |
 | Maintenance due line (`maintenance-stamp.mjs`) | v1.1 | Nothing is scheduled, so nothing is late (ADR 0038) |
-| Scheduled maintenance, off-site bundle, daily resurfacer | v1.0 | ADRs 0021, 0032, 0033 |
+| Scheduled maintenance, off-site bundle, daily resurfacer | before v1.0 — the code was never in the v1.0 tree, though its `scripts/README.md` still described it | ADRs 0021, 0032, 0033 |

@@ -53,10 +53,12 @@ and removed are listed as removed rather than quietly dropped — see
 - **The rules that can be checked are written as checks.** Wikilink form, note
   frontmatter and catalog coverage are encoded in `.claude/hooks/checks.mjs`,
   and `scripts/link-sweep.mjs` reports broken links, orphans and uncatalogued
-  notes whenever you run it — this system's hardest-won lesson is that a
-  written procedure loses to the in-the-moment default while the work still
-  looks finished. Since v1.1 nothing runs the compiled checks automatically;
-  they are kept as code, and `/audit` reports what they encode.
+  notes — this system's hardest-won lesson is that a written procedure loses
+  to the in-the-moment default while the work still looks finished. Since
+  v1.1 neither runs on its own: run `node .claude/hooks/checks.mjs` before a
+  commit (`--staged` for what is staged, `--all` for the whole vault; it
+  exits 1 on a finding) and the sweep when you tidy. `/audit` reports what
+  the checks encode either way.
 
 Full design rationale: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -70,8 +72,8 @@ logs/         append-only session logs + logs/signals/, the event ledger
 archive/      closed and superseded content — never deleted, always moved here
 scripts/      link sweep, retrieval eval, brain and project doctors, metrics
 .agents/      skills — the one copy both runtimes load
-.claude/      the shared SessionStart hook, note and project-repo templates,
-              the golden set
+.claude/      the shared SessionStart hook, the compiled checks, note and
+              project-repo templates, the golden set
 .codex/       the thin Codex adapter into that same hook
 AGENTS.md     the constitution — the rules you and both agents work under
 CLAUDE.md     one line that imports AGENTS.md, plus Claude-only notes
@@ -88,7 +90,9 @@ tree is platform-bound.
 
 ## Quickstart
 
-**Requirements:** git 2.28+, Node.js 18.13+, a GitHub account, and
+**Requirements:** git 2.28+, Node.js 18.13+, a GitHub account — plus the
+[GitHub CLI](https://cli.github.com) (`gh`, logged in) for the agent-run
+setup, which creates your repo with it — and
 [Claude Code](https://claude.com/product/claude-code) or
 [Codex](https://openai.com/codex) — or both. Obsidian is optional but
 recommended — the vault is plain Markdown either way.
@@ -170,7 +174,8 @@ one place:
 the brain root themselves (their own location, or `BRAIN_DIR` if you set it),
 so they are correct from any working directory. Trade-off, plainly: every
 session on the machine pays a small `git pull` at start — skipped whenever the
-vault has uncommitted changes, because those belong to a live task.
+vault has uncommitted changes to tracked files, because those belong to a live
+task.
 
 In a project session the hook also injects standing rules: the project's
 state lives in its own repo, so read its `AGENTS.md`, `docs/CURRENT_STATE.md`
@@ -220,11 +225,15 @@ for this release and ADR 0046 says which ones.
 - `scripts/brain-doctor.mjs` and `scripts/project-doctor.mjs`, both
   read-only; the ranked lookup `retrieval-eval.mjs --query`;
   `notes/self-evolution-policy.md`, split out of the lifecycle policy.
+- A command line for the compiled checks,
+  `node .claude/hooks/checks.mjs [--staged | --all] [--record]`, now that no
+  hook runs them; `--help` on `install.mjs` and `link-sweep.mjs`, and
+  `BRAIN_DIR` honoured by the link sweep like every other script.
 
 **Changed**
 
-- `SessionStart` skips its pull when the vault has uncommitted changes,
-  instead of stashing another task's files (no more autostash).
+- `SessionStart` skips its pull when the vault has uncommitted changes to
+  tracked files, instead of stashing another task's files (no more autostash).
 - Secret scanning is opt-in: gitleaks through `.pre-commit-config.yaml`.
 - `PROPOSALS.md` is a list you keep by hand; `/curator` and `/audit` report
   in the conversation and their own log instead of appending to it.

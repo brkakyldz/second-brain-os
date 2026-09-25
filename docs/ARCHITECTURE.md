@@ -183,11 +183,16 @@ Only the parts of the policy that exist as running code belong here.
 Written as code but **not run automatically** since v1.1:
 
 - **Compiled checks** (`.claude/hooks/checks.mjs`) — wikilink short form, note
-  frontmatter, `INDEX.md` coverage. They ran from the Stop checkpoint until v1.1.
-  There is no command-line runner for them yet: today they are exercised by
-  `scripts/tests/index-coverage.test.mjs` and read by `vault-metrics.mjs`,
-  `link-sweep.mjs` carries a git-blind twin of the index-coverage check, and
-  `/audit` reports what they encode.
+  frontmatter, `INDEX.md` coverage. They ran from the Stop checkpoint until
+  v1.1. Now they run when someone runs them:
+  `node .claude/hooks/checks.mjs [--staged | --all] [--record]` prints every
+  finding and exits 1 when there is one — by hand before a commit, or from a
+  git pre-commit hook if the owner wants the warning to become a gate (the
+  template wires none; that is a policy call). It is read-only unless
+  `--record` appends new fires to the Signal Ledger, which is the only way
+  `vault-metrics.mjs` gets fires to count. `link-sweep.mjs` carries a
+  git-blind twin of the index-coverage check, `/audit` runs the checks
+  read-only, and `scripts/tests/index-coverage.test.mjs` covers both.
 - **The secret scanner** (`scanStagedForSecrets` in `lib.mjs`). The scan that
   runs, once you install it, is gitleaks via `.pre-commit-config.yaml`.
 

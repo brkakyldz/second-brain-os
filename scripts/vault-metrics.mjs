@@ -135,7 +135,12 @@ for (const e of checkFireEvents) {
 }
 
 function checkFiresSection() {
-  const lines = ['## Check fires', ''];
+  const lines = [
+    '## Check fires',
+    '',
+    'Recorded only by `node .claude/hooks/checks.mjs --record` — nothing runs the checks on its own since v1.1, so a zero means nothing was recorded, not that the vault is clean.',
+    '',
+  ];
   if (CHECKS.length === 0) {
     lines.push('No checks registered.', '');
     return lines;

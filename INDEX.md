@@ -18,14 +18,15 @@ when), the durable-fact index is `core/MEMORY.md` (one line per fact, budgeted),
 and the open-work surface is `PROPOSALS.md`. Four files, four jobs, no overlap.
 
 **Who writes it:** whoever adds or retires a page — `/ingest`, `/file`,
-`/curator`, or a session writing a note by hand. All four are the same
-responsibility: a note without a row here is a page nothing can find.
+`/lesson`, `/curator`, or a session writing a note by hand. All of them carry
+the same responsibility: a note without a row here is a page nothing can find.
 
 **What keeps it honest:** `node scripts/link-sweep.mjs`, which compares every
 file in `notes/` against this table and takes no view of git at all. It is a
 **warning, not a gate** — a missing row is reported, never blocked (ADR 0035,
 0038). The `index-coverage` check in `.claude/hooks/checks.mjs` encodes the
-same rule for changed files, but since v1.1 nothing runs it automatically.
+same rule for the files you are about to commit; nothing runs it on its own
+since v1.1, so run `node .claude/hooks/checks.mjs --staged` before a commit.
 
 Keep the description column about *what the page is for*, not what it contains.
 A row that reads "notes on X" tells a future session nothing it could not have
