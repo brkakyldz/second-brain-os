@@ -436,7 +436,8 @@ SessionEnd or PreCompact — commits are made by the task that wrote the files.
 
 Claude Code — merge into ~/.claude/settings.json (append to any existing
 "hooks" arrays, never replace them), then empty the "hooks" block in this
-repo's .claude/settings.json, or the hook fires twice inside the vault:
+repo's .claude/settings.json and commit that file, or the hook fires twice
+inside the vault:
 
 ${indent(claudeBlock)}
 
