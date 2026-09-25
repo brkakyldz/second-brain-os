@@ -43,32 +43,23 @@ and removed are listed as removed rather than quietly dropped — see
 Above the dashed line a model reads and decides. Below it there is no model —
 only plain files, Node and Git.
 
-- **One hook starts every session, and it never commits.** Both runtimes run
-  the same `SessionStart` hook. It pulls the vault and injects Tier 0,
-  `core/`: `IDENTITY.md`, `USER.md` (2000-character budget) and `MEMORY.md`
-  (one pointer per line, 4000 characters), with `OPEN_QUESTIONS.md` as a
-  pointer; a session in any other project (global mode) gets `USER.md` and
-  `MEMORY.md` only. It stays inert until `core/.vault-active` exists, and a
-  failed pull never blocks a session. That is all the automation there is.
-- **The rest is read on demand.** Tier 1 is `INDEX.md`, then the two or three
-  pages it points at; Tier 2, the whole vault and its git history, is searched
-  only when those don't answer.
-- **Two inlets, both ending in distillation.** What you say is written as a
-  note there and then — there is no inbox to triage. What you read goes into
-  `raw/`, and `/ingest` discusses it with you, distills it, reconciles it with
-  what the vault already believes and catalogs it. `notes/` is flat and a note
-  never moves as it matures, so a link never breaks.
-- **Commits belong to the task that wrote the files,** by explicit path, never
-  `git add -A`: two sessions, or both runtimes, may share one checkout. And
-  nothing exists twice — `AGENTS.md` is the one constitution (`CLAUDE.md`
-  imports it), `.agents/skills/` the one skills copy.
-- **Checkable rules are code, and you run them.** `node .claude/hooks/checks.mjs
-  --staged` before a commit (`--all` for the whole vault; exit 1 on a
-  finding) checks wikilink form, frontmatter and catalog coverage;
-  `node scripts/link-sweep.mjs` when you tidy. Since v1.1 nothing runs them on
-  its own.
+- **One hook, and it never commits.** Both runtimes run the same
+  `SessionStart` hook: it pulls the vault and injects `core/`. That is all the
+  automation there is.
+- **Three tiers of reading.** `core/` at every start; `INDEX.md` and the pages
+  it points at when a question needs them; `logs/` and a full-text search only
+  when those don't answer.
+- **You talk, the agent distills.** Something worth keeping becomes a note on
+  the spot; a source you drop in `raw/` becomes notes through `/ingest`.
+  Nothing waits in a queue.
+- **Commits belong to the task.** Each task commits the files it wrote, by
+  name — never `git add -A` — so two sessions, or both runtimes, can share one
+  checkout.
+- **One copy of everything.** `AGENTS.md` is the only rulebook (`CLAUDE.md`
+  just imports it) and `.agents/skills/` the only skills folder, for Claude
+  Code and Codex alike.
 
-The design and the reasoning behind each part:
+Tiers, budgets and the reasoning behind each part:
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 <details>
@@ -182,11 +173,12 @@ at user level: `node install.mjs --link-global-skills` (opt-in;
 | `/curator` | consolidate memory, resolve stale facts, keep the core files inside budget |
 | `/audit` | structural and semantic report — budgets, orphans, contradictions, tag sprawl; reports only, never fixes |
 
-And five scripts, each run as `node scripts/<name>.mjs` and all read-only
-except the link sweep's one report file: `brain-doctor`, `project-doctor`
-(every repo a project card names: uncommitted project memory, stale STATE,
-leftover worktrees), `link-sweep`, `retrieval-eval --query "…"` and
-`vault-metrics`. Nothing runs on a schedule; you run a pass when you want it.
+Plus a few read-only scripts you run when you want them — nothing runs on a
+schedule: `node scripts/brain-doctor.mjs` (is the setup healthy),
+`node scripts/project-doctor.mjs` (is each project's memory committed and its
+state fresh), `node scripts/link-sweep.mjs` (broken links, orphans — writes one
+report) and `node .claude/hooks/checks.mjs --staged` before a commit (link
+form, frontmatter, catalog). All of them: [`scripts/README.md`](scripts/README.md).
 
 ## What's new in v1.1
 

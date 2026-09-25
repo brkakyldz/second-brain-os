@@ -58,8 +58,9 @@ breaks because a thought grew up.
   doctor, project doctor), each invoked by hand or by a skill. Nothing here
   runs on a clock: unattended scheduling was retired (ADR 0033).
 - `docs/` — documentation about the vault, not vault content: the
-  architecture guide, the decision index (`DECISIONS.md`) and the template's
-  full decision records (`docs/decisions/`). Your own decisions are
+  architecture guide, the decision index (`DECISIONS.md`), the template's
+  full decision records (`docs/decisions/`), the FAQ, the upgrade guide and
+  the README's figures (`docs/assets/`). Your own decisions are
   `type: decision` notes in `notes/`, archived once superseded — one home,
   described in `DECISIONS.md` § Recording your own.
 - Root files: `INDEX.md` is the page catalog — every note, one line each, the
