@@ -28,6 +28,12 @@
 // user-level skills folders follow CLAUDE_CONFIG_DIR / CODEX_HOME / the home
 // directory; a separate skills kit is scanned only when named with --kit or
 // BRAIN_KIT_DIR.
+//
+// Legacy cutoff (LEGACY_CUTOFF below, overridable with --since YYYY-MM-DD): a
+// log dated on or after it whose `project:` resolves to no card is a FLAG;
+// an older one predates project cards and is only counted as legacy. The
+// default is the day ADR 0045 introduced project cards. A vault that adopted
+// cards later passes the date it did.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
@@ -39,29 +45,37 @@ const vault = process.env.BRAIN_DIR?.trim() || path.resolve(path.dirname(fileURL
 const args = process.argv.slice(2);
 const json = args.includes('--json');
 const strict = args.includes('--strict');
+// The day ADR 0045 introduced project cards — see the header comment.
+const LEGACY_CUTOFF = '2026-09-25';
+
 const extraRepos = [];
+let since = LEGACY_CUTOFF;
 const kits = [];
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--repo' && args[i + 1]) extraRepos.push(args[++i]);
   else if (args[i] === '--kit' && args[i + 1]) kits.push(args[++i]);
+  else if (args[i] === '--since' && args[i + 1]) since = args[++i];
 }
 if (process.env.BRAIN_KIT_DIR?.trim()) kits.push(process.env.BRAIN_KIT_DIR.trim());
 if (args.includes('--help') || args.includes('-h')) {
   console.log([
-    'Usage: node scripts/project-doctor.mjs [--repo PATH ...] [--kit DIR ...] [--json] [--strict]',
+    'Usage: node scripts/project-doctor.mjs [--repo PATH ...] [--kit DIR ...] [--since YYYY-MM-DD] [--json] [--strict]',
     '',
     'Read-only report over every repo a project card names (type: project + repo:).',
     '--repo PATH  also check a repo that has no card yet',
     '--kit DIR    also scan a separate skills kit for drifted copies (DIR/skills',
     '             if it exists, else DIR itself); BRAIN_KIT_DIR does the same',
+    '--since DATE a log project id that resolves to no card is a FLAG from',
+    `             this date on, legacy before it (default ${LEGACY_CUTOFF})`,
     '--strict     exit 1 when any FLAG is reported; warnings do not fail it',
   ].join('\n'));
   process.exit(0);
 }
+if (!/^\d{4}-\d\d-\d\d$/.test(since) || Number.isNaN(Date.parse(since))) {
+  console.error(`project-doctor: --since needs a date as YYYY-MM-DD, got "${since}"`);
+  process.exit(2);
+}
 
-// The date ADR 0045 came into force. A log older than this predates project
-// cards, so an id that resolves to nothing is legacy, not a mistake.
-const CONTRACT_DATE = '2026-09-25';
 const caseInsensitive = process.platform === 'win32' || process.platform === 'darwin';
 
 function read(file) {
@@ -331,10 +345,10 @@ const legacy = new Set();
 for (const name of list(path.join(vault, 'logs')).filter((n) => /^\d{4}-\d\d-\d\d.*\.md$/.test(n))) {
   const id = scalar(fm(read(path.join(vault, 'logs', name))).project);
   if (!id || cardIds.has(id)) continue;
-  if (name.slice(0, 10) >= CONTRACT_DATE) add(vaultFindings, 'FLAG', `unresolved log project: ${name} (${id})`);
+  if (name.slice(0, 10) >= since) add(vaultFindings, 'FLAG', `unresolved log project: ${name} (${id})`);
   else legacy.add(id);
 }
-if (legacy.size) add(vaultFindings, 'WARN', `${legacy.size} legacy log project id(s) do not resolve`);
+if (legacy.size) add(vaultFindings, 'WARN', `${legacy.size} legacy log project id(s) do not resolve (logs before ${since})`);
 const focus = (read(path.join(vault, 'core', 'USER.md')) || '').split(/^## /m)
   .find((section) => section.startsWith('Current focus\n'))?.split(/^<!--/m)[0] || '';
 for (const match of focus.matchAll(/\[\[([^\]|#]+)(?:[^\]]*)\]\]/g)) {

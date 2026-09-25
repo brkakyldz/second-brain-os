@@ -189,24 +189,30 @@ if (!existsSync(skillsTarget)) {
 // --- Global mode tells every project session to end with /closeout (ADR
 // 0045); the rule is hollow if the skill cannot load there. Only a runtime
 // that is actually in global mode is checked — project scope never leaves the
-// vault, where .agents/skills already has all three.
+// vault, where .agents/skills already has all three. Codex builds differ in
+// the user-level folder they read (CODEX_HOME/skills or ~/.agents/skills), so
+// a link in either one counts.
 const GLOBAL_SKILLS = ['closeout', 'lesson', 'recall'];
 const globalRuntimes = [
-  claudeStarts.includes('global') && { runtime: 'Claude Code', dir: path.join(claudeRoot, 'skills') },
-  codexGlobalStarts.length > 0 && { runtime: 'Codex', dir: path.join(codexRoot, 'skills') },
+  claudeStarts.includes('global') && { runtime: 'Claude Code', dirs: [path.join(claudeRoot, 'skills')] },
+  codexGlobalStarts.length > 0 && {
+    runtime: 'Codex',
+    dirs: [path.join(codexRoot, 'skills'), path.join(os.homedir(), '.agents', 'skills')],
+  },
 ].filter(Boolean);
+function resolvesTo(link, target) {
+  try {
+    return existsSync(target) && norm(realpathSync(link)) === norm(realpathSync(target));
+  } catch {
+    return false;
+  }
+}
 if (globalRuntimes.length > 0) {
   const unlinked = [];
-  for (const { runtime, dir } of globalRuntimes) {
+  for (const { runtime, dirs } of globalRuntimes) {
     for (const name of GLOBAL_SKILLS) {
       const ours = path.join(skillsTarget, name);
-      let real = null;
-      try {
-        real = realpathSync(path.join(dir, name));
-      } catch {
-        real = null;
-      }
-      if (!real || !existsSync(ours) || norm(real) !== norm(realpathSync(ours))) unlinked.push(`${runtime} ${name}`);
+      if (!dirs.some((dir) => resolvesTo(path.join(dir, name), ours))) unlinked.push(`${runtime} ${name}`);
     }
   }
   add(

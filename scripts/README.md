@@ -115,8 +115,10 @@ survives as a convention for the skills and feeds nothing that scores them.
 - **When:** at the start of a project session that resumes old work, or before
   `/curator`: `node scripts/project-doctor.mjs`. `--repo <path>` adds a
   repo with no card yet; `--kit <dir>` (or `BRAIN_KIT_DIR`) adds a separate
-  skills kit to the drift scan, if you keep one; `--json`; `--strict` exits 1
-  on any FLAG.
+  skills kit to the drift scan, if you keep one; `--since YYYY-MM-DD` moves
+  the date from which a log `project:` id with no card is a FLAG rather than
+  legacy (default: the day ADR 0045 introduced cards, documented at the top
+  of the script); `--json`; `--strict` exits 1 on any FLAG.
 - **Output:** stdout only. Every git call uses `--no-optional-locks`, so it
   never contends with a session committing in the same repo, and values read
   from a STATE file are never passed to git as options.

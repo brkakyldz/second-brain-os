@@ -116,6 +116,19 @@ test('cards, git history, dirty memory, stale state, interrupted runs, worktrees
   assert.equal(scan(vault, '--strict').code, 1);
 });
 
+test('--since moves the legacy cutoff; a malformed date is refused', (t) => {
+  const root = tmp('project-doctor-since-', t);
+  put(path.join(root, 'logs', '2026-10-01_0900.md'), '---\nproject: no-card\n---\n');
+  const flagged = (data) => data.vault.some((f) => f.level === 'FLAG' && f.reason.includes('no-card'));
+  assert.equal(flagged(scan(root).data), true, 'after the default cutoff it is a FLAG');
+  const later = scan(root, '--since', '2026-10-02').data;
+  assert.equal(flagged(later), false);
+  assert.ok(later.vault.some((f) => f.reason.includes('1 legacy log project id') && f.reason.includes('2026-10-02')));
+  const bad = command(process.execPath, [doctor, '--since', '10/02/2026'], { ...baseEnv, BRAIN_DIR: root });
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /YYYY-MM-DD/);
+});
+
 test('--repo checks a repo without a card', (t) => {
   const root = tmp('project-doctor-extra-', t);
   const repo = path.join(root, 'plain');
