@@ -60,7 +60,8 @@ Split by what the record is for, not by where the rule-writer happens to be.
 The formats ship with this template: the repo side in
 `.claude/templates/project-repo/`, the project card in
 `.claude/templates/project.md`. The step that writes both sides at the end of
-work is `/closeout` (`.agents/skills/closeout/`).
+work is `/closeout` (`.agents/skills/closeout/`); the read-only
+`scripts/project-doctor.mjs` reports where the split is not holding.
 
 ## Rationale
 
@@ -93,6 +94,7 @@ brain nobody read and one record nobody committed.
   session, not only inside the vault. They find the vault through the
   global-mode SessionStart line ("The brain lives at …"), and
   `node install.mjs --link-global-skills` makes them loadable there (opt-in).
-- **Watch:** if the state files go stale as fast as the old status headers
-  did, the contract is wrong, not the agents — revisit this decision rather
-  than adding enforcement first.
+- **Watch:** the project doctor's flags over the next sessions of project
+  work. If the state files go stale as fast as the old status headers did,
+  the contract is wrong, not the agents — revisit this decision rather than
+  adding enforcement first.

@@ -113,6 +113,9 @@ $last = git log -1 --format=%H -- docs/CURRENT_STATE.md
 git log --format= --name-only "$last..HEAD" -- . ':!docs/CURRENT_STATE.md' ':!docs/WORKLOG.md' ':!docs/runs'
 ```
 
+`node <brain>/scripts/project-doctor.mjs` runs the same check — and the rest
+of this contract — for every repo a brain card names, read-only.
+
 ## Interrupted runs
 
 An autonomous run sets STATE `active_run: docs/runs/<file>.md` when it starts

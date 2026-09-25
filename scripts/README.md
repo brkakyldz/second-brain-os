@@ -98,6 +98,35 @@ survives as a convention for the skills and feeds nothing that scores them.
   the underlying files because this table cannot localize the fault, remove it
   rather than grow it into a dashboard.
 
+## B16 — `project-doctor.mjs`
+
+- **What:** a read-only view of project memory across every repo a project
+  card names (`type: project` + `repo:`, ADR 0045): git present, a remote
+  present (`remote: none` on the card makes that a warning, not a flag),
+  untracked or modified project memory (plans, ADRs, docs, research),
+  unpushed commits, `docs/CURRENT_STATE.md` freshness, an interrupted
+  `active_run`, leftover worktrees, status lines outside the state file, log
+  `project:` ids that resolve to no card, `USER.md` focus pointing at a
+  paused or done card, and drifted copies of the same skill across every
+  skills folder that exists — the vault's and each project's
+  `.agents/skills`, `~/.agents/skills`, and the user-level folders of both
+  runtimes (`CLAUDE_CONFIG_DIR` / `CODEX_HOME` respected).
+- **When:** at the start of a project session that resumes old work, or before
+  `/curator`: `node scripts/project-doctor.mjs`. `--repo <path>` adds a
+  repo with no card yet; `--kit <dir>` (or `BRAIN_KIT_DIR`) adds a separate
+  skills kit to the drift scan, if you keep one; `--json`; `--strict` exits 1
+  on any FLAG.
+- **Output:** stdout only. Every git call uses `--no-optional-locks`, so it
+  never contends with a session committing in the same repo, and values read
+  from a STATE file are never passed to git as options.
+- **Failure that demanded it:** in the reference instance, a survey of its
+  project repos found project memory untracked in several of them, one project
+  that was never a git repo, one with no remote while an automation ran from
+  its uncommitted code, and merged worktrees piling up — none of it visible
+  from the vault.
+- **Kill criterion:** if three consecutive runs report the same FLAGs and none
+  gets fixed, the report is noise — cut it to the checks that did get acted on.
+
 ## `vault-metrics.mjs`
 
 - **What:** deterministic counts from the signal ledger and `notes/` — check
@@ -114,6 +143,13 @@ Regression test for the two INDEX-coverage instruments — the `index-coverage`
 check in `.claude/hooks/checks.mjs` and the git-blind sweep in
 `link-sweep.mjs` — against a throwaway repo in the system temp directory:
 `node scripts/tests/index-coverage.test.mjs`. Exits 1 on a failure.
+
+## `tests/project-doctor.test.mjs`
+
+Tests for `project-doctor.mjs` on fixture vaults, repos and home folders it
+builds in the system temp directory — the real home folder and the machine's
+system git config are never read: `node scripts/tests/project-doctor.test.mjs`.
+Exits 1 on a failure.
 
 ## Retired — kept here so nobody re-adds them by accident
 

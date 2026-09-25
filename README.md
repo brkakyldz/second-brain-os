@@ -65,7 +65,7 @@ notes/        the memory store — flat, wikilinked, told apart by type:
 raw/          immutable sources you put there; the agent reads, never writes
 logs/         append-only session logs + logs/signals/, the event ledger
 archive/      closed and superseded content — never deleted, always moved here
-scripts/      link sweep, retrieval eval, brain doctor, vault metrics
+scripts/      link sweep, retrieval eval, brain and project doctors, metrics
 .agents/      skills — the one copy both runtimes load
 .claude/      the shared SessionStart hook, note and project-repo templates,
               the golden set
@@ -138,7 +138,9 @@ The commands worth knowing:
 | `/audit` | structural and semantic report — budgets, orphans, contradictions, tag sprawl. Reports only, never fixes |
 
 And the scripts, all read-only except the link sweep's one report file:
-`node scripts/brain-doctor.mjs`, `node scripts/link-sweep.mjs`,
+`node scripts/brain-doctor.mjs`, `node scripts/project-doctor.mjs` (every
+repo a project card names: uncommitted project memory, stale STATE, leftover
+worktrees), `node scripts/link-sweep.mjs`,
 `node scripts/retrieval-eval.mjs --query "…"`, `node scripts/vault-metrics.mjs`.
 
 ## Global mode (recommended)

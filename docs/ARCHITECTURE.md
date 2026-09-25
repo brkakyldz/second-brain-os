@@ -360,6 +360,11 @@ How the pieces meet:
   `active_run` whose report is missing or has no `status:`. The next session
   trusts git, the diff and a fresh test run over what is written down, then
   corrects STATE.
+- **`scripts/project-doctor.mjs` reports where the split is not holding**,
+  read-only, across every repo a card names: project memory that is not
+  committed, no remote, a stale or missing STATE, an interrupted run, leftover
+  worktrees, status claimed outside STATE, log ids that resolve to no card,
+  and drifted copies of one skill.
 
 Deliberately not shipped: the reference instance also has commit-gate,
 holdout-lock and test-gate hooks for its project repos. They are runtime hooks

@@ -291,7 +291,10 @@ Tell your user, concretely:
   Mention `/lesson` specifically — the first time the agent gets something
   wrong is the most useful thing that will happen this week, and it only
   becomes an enforced check if it is captured.
-- `node scripts/brain-doctor.mjs` whenever something feels off.
+- `node scripts/brain-doctor.mjs` whenever something feels off, and
+  `node scripts/project-doctor.mjs` before resuming old project work — it
+  reads every repo a project card names and reports uncommitted project
+  memory, stale STATE and leftover worktrees.
 - **Secret scanning is opt-in.** Recommend `pip install pre-commit`, then
   `pre-commit install` in the vault (wires gitleaks into every commit), and
   GitHub's secret-scanning push protection on the repo.

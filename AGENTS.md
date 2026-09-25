@@ -51,7 +51,7 @@ breaks because a thought grew up.
   holds only the thin Codex SessionStart adapter. Not vault content; this is
   how the agent runs, not what it knows about the world.
 - `scripts/` — helper jobs (link sweep, metrics, retrieval eval, brain
-  doctor), each invoked by hand or by a skill. Nothing here runs on a clock:
+  doctor, project doctor), each invoked by hand or by a skill. Nothing here runs on a clock:
   unattended scheduling was retired (ADR 0033).
 - Root files: `INDEX.md` is the page catalog — every note, one line each, the
   first thing to read when answering a question. `PROPOSALS.md` is a list of
@@ -215,7 +215,8 @@ repo holds execution state (ADR 0045). `/closeout` writes it.
   - `related`: optional list of `[[wikilinks]]`
   - Project cards add `project_id` (= filename), `repo`, `remote`,
     `state_file` and `project_aliases`; project logs add `project` and
-    `runtime`.
+    `runtime`. `scripts/project-doctor.mjs` reports ids that resolve to no
+    card.
   - `aliases`: optional. Its job is to catch the query that would otherwise
     miss the note — including the same term in another language, since
     retrieval here is lexical.

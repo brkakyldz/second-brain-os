@@ -25,7 +25,8 @@ cut:
 - research snapshots with a live distillation (ADR 0043, five days);
 - Claude Code and Codex as equal runtimes over one skills copy (ADR 0044,
   three days);
-- the execution-layer contract and `/closeout` (ADR 0045, the same day).
+- the execution-layer contract, `/closeout` and the project doctor (ADR 0045,
+  the same day).
 
 ## Decision
 
